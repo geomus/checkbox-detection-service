@@ -14,11 +14,11 @@
   "author": "Nahuel Daneri <nahuel.daneri@outlook.com>",
   "license": "MIT",
   "scripts": {
-    "dev": "yarn workspace api run dev",
+    "dev": "yarn workspace api run build && node scripts/dev.mjs",
     "build": "yarn workspaces foreach --all run build",
     "test": "yarn workspaces foreach --all run test",
     "lint": "yarn workspaces foreach --all run lint",
-    "deploy": "yarn workspace web run build && yarn workspace api run deploy",
+    "deploy": "yarn build && yarn serverless deploy",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -28,6 +28,8 @@
     "lint-staged": "^17.3.0",
     "prettier": "^3.9.6",
     "serverless": "3",
+    "serverless-better-credentials": "^2.0.1",
+    "serverless-offline": "13.10.1",
     "typescript": "^7.0.2"
   },
   "lint-staged": {

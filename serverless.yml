@@ -1,0 +1,55 @@
+service: checkbox-detection-service
+frameworkVersion: '3'
+
+custom:
+  # one definition for the detector's function name: it names the env var the api
+  # reads and scopes the api role's lambda:InvokeFunction grant, and the two must match
+  detectorFunctionName: ${self:service}-${sls:stage}-detector
+
+plugins:
+  - serverless-better-credentials
+  - serverless-offline
+
+package:
+  individually: true
+
+provider:
+  name: aws
+  runtime: nodejs24.x
+  region: us-east-1
+  profile: personal
+  architecture: arm64 # matches what Docker builds on Apple Silicon, avoids Runtime.InvalidEntrypoint
+  timeout: 29 # httpApi hard-caps integration timeout at 30s, stay under it
+  versionFunctions: false # no aliases/traffic-shifting here, skip the extra Version resources
+  logRetentionInDays: 14
+  runtimeManagement: onFunctionUpdate
+  ecr:
+    images:
+      detector:
+        path: services/detector
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          # built as a string, not !GetAtt, so this role doesn't depend on the
+          # detector function that itself depends on this same shared role
+          Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:custom.detectorFunctionName}'
+
+functions:
+  api:
+    handler: apps/api/dist/lambda.handler
+    package:
+      patterns:
+        - '!**'
+        - 'apps/api/dist/**'
+    environment:
+      DETECTOR_FUNCTION_NAME: ${self:custom.detectorFunctionName}
+    events:
+      - httpApi:
+          path: /detect
+          method: post
+
+  detector:
+    image:
+      name: detector
