@@ -5,7 +5,16 @@
   "type": "module",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.1117.0",
     "hono": "^4.13.4",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && esbuild src/lambda.ts --bundle --platform=node --format=cjs --target=node24 --outfile=dist/lambda.js && echo '{\"type\":\"commonjs\"}' > dist/package.json"
   }
 }
