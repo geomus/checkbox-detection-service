@@ -1,0 +1,32 @@
+service: checkbox-detection-service
+frameworkVersion: '3'
+projectDir: '../'
+
+provider:
+  name: aws
+  runtime: nodejs24.x
+  region: us-east-1
+  timeout: 30
+  ecr:
+    images:
+      detector:
+        path: ../services/detector
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource: !GetAtt DetectorLambdaFunction.Arn
+
+functions:
+  api:
+    handler: ../apps/api/dist/lambda.handler
+    package:
+      patterns:
+        - '!../**'
+        - '../apps/api/dist/**'
+    url: true
+
+  detector:
+    image:
+      name: detector
