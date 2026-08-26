@@ -1,0 +1,58 @@
+{
+  "document1.png": {
+    "min_boxes_detected": 15,
+    "known_checked": [
+      "Owner",
+      "Fee Simple",
+      "Refinance Transaction",
+      "Existing"
+    ],
+    "known_unchecked": [
+      "Tenant",
+      "Vacant",
+      "Leasehold",
+      "Purchase Transaction"
+    ]
+  },
+  "document2.png": {
+    "min_boxes_detected": 12,
+    "known_checked": [
+      "Suburban",
+      "Increasing",
+      "Shortage",
+      "No"
+    ],
+    "known_unchecked": [
+      "Urban",
+      "Rural",
+      "Stable",
+      "Declining"
+    ]
+  },
+  "document3.png": {
+    "min_boxes_detected": 15,
+    "known_checked": [
+      "Seller financial assistance prevalent: Yes",
+      "Foreclosure sales (REO) factor: Yes"
+    ],
+    "known_unchecked": [
+      "Seller financial assistance prevalent: No",
+      "Foreclosure sales (REO) factor: No"
+    ]
+  },
+  "document4.png": {
+    "min_boxes_detected": 18,
+    "known_checked": [
+      "Owner",
+      "Fee Simple",
+      "Suburban",
+      "No"
+    ],
+    "known_unchecked": [
+      "Tenant",
+      "Vacant",
+      "Leasehold",
+      "Urban"
+    ]
+  }
+}
