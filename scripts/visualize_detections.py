@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "detector"))
@@ -33,7 +32,7 @@ def main() -> None:
 
     for image_path in sorted(SAMPLE_DIR.glob("*.jpg")):
         boxes = detect_checkboxes(image_path.read_bytes())
-        canvas = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        canvas = cv2.imread(str(image_path))
 
         for box in boxes:
             x1, y1, x2, y2 = box["bbox"]

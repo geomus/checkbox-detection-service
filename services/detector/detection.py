@@ -5,13 +5,8 @@ bounding box of every checkbox-like square it finds. No AWS, no file or network
 I/O, no environment lookups. ``handler.py`` is the only place that talks to the
 outside world.
 
-Approach (classical CV, no machine learning):
-  1. decode the image to grayscale
-  2. turn it into black/white with a local (adaptive) threshold
-  3. find contours and keep the ones shaped like a small, roughly square box
-  4. drop duplicates (a drawn square produces an inner and an outer contour)
-
-See ``README.md`` in this folder for the reasoning and known limitations.
+See ``README.md`` in this folder for the pipeline, the reasoning and the known
+limitations.
 """
 
 import cv2
@@ -31,8 +26,8 @@ MAX_BOX_SIDE_PX = 90
 # keeps anything between roughly 3:4 and 4:3.
 ASPECT_TOLERANCE = 0.35
 
-# A real box outline fills most of its own bounding rectangle. Arcs, stray ink
-# and handwriting usually do not, so this rejects a lot of noise.
+# A real box outline fills most of its own bounding rectangle. Arcs, letters and
+# stray ink usually do not, so this rejects a lot of noise.
 MIN_RECT_FILL = 0.80
 
 # Share of the box interior that must be ink for it to count as checked. A drawn
@@ -42,12 +37,6 @@ FILL_RATIO_THRESHOLD = 0.12
 # Fraction trimmed off each side before measuring the fill, so the box's own
 # border strokes are not counted as if they were a mark.
 BORDER_INSET_RATIO = 0.18
-
-# Adaptive-threshold parameters. Block size is the neighbourhood (in px) used to
-# pick a local cutoff and must be odd; C is subtracted from that local mean, so
-# a higher C marks fewer pixels as ink.
-_ADAPTIVE_BLOCK_SIZE = 15
-_ADAPTIVE_C = 7
 
 # (x, y, width, height), the shape returned by cv2.boundingRect.
 Rect = tuple[int, int, int, int]
@@ -64,13 +53,8 @@ def detect_checkboxes(image_bytes: bytes) -> list[dict]:
     candidates = _find_square_candidates(binary)
     boxes = _deduplicate(candidates)
 
-    # TODO: the response gives the box location and whether it is filled, but not
-    # which field it belongs to ("Owner", "Fee Simple", ...). That needs OCR of
-    # the nearby text plus a spatial pairing heuristic. Options, cheapest first:
-    # Tesseract bundled in this container ($0), Textract DetectDocumentText
-    # (~$1.50 / 1000 pages), or Textract AnalyzeDocument FORMS (~$50 / 1000
-    # pages, which returns labels and selection state directly). Would ship
-    # behind an opt-in flag so the base response and cost are unchanged.
+    # TODO: this reports box location + fill, not the field label ("Owner", ...).
+    # That needs OCR + a spatial pairing heuristic; see docs/detection-approach.md.
     return [
         {"bbox": [x, y, x + w, y + h], "is_checked": _is_filled(binary, (x, y, w, h))}
         for (x, y, w, h) in boxes
@@ -78,7 +62,6 @@ def detect_checkboxes(image_bytes: bytes) -> list[dict]:
 
 
 def _load_grayscale(image_bytes: bytes) -> np.ndarray:
-    """Decode raw image bytes (PNG/JPEG/...) into a single-channel gray image."""
     buffer = np.frombuffer(image_bytes, dtype=np.uint8)
     gray = cv2.imdecode(buffer, cv2.IMREAD_GRAYSCALE)
     if gray is None:
@@ -87,18 +70,11 @@ def _load_grayscale(image_bytes: bytes) -> np.ndarray:
 
 
 def _binarize(gray: np.ndarray) -> np.ndarray:
-    """Convert gray -> black/white with ink as white (255) on black (0).
-
-    An adaptive threshold uses a local cutoff per neighbourhood instead of one
-    global value, so a scan that is darker in one corner still comes out clean.
-    """
+    """Convert gray -> black/white with ink as white (255) on black (0)."""
+    # adaptiveThreshold args: the window size in px (must be odd) and a constant
+    # subtracted from each window's mean. A local cutoff handles uneven lighting.
     return cv2.adaptiveThreshold(
-        gray,
-        255,
-        cv2.ADAPTIVE_THRESH_MEAN_C,
-        cv2.THRESH_BINARY_INV,
-        blockSize=_ADAPTIVE_BLOCK_SIZE,
-        C=_ADAPTIVE_C,
+        gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, blockSize=15, C=7
     )
 
 
@@ -110,7 +86,6 @@ def _find_square_candidates(binary: np.ndarray) -> list[Rect]:
 
 
 def _looks_like_box(contour: np.ndarray) -> bool:
-    """True when one contour has the shape of a checkbox outline."""
     perimeter = cv2.arcLength(contour, closed=True)
     # approxPolyDP simplifies the outline; a clean rectangle collapses to 4 points.
     corners = cv2.approxPolyDP(contour, 0.02 * perimeter, closed=True)
@@ -151,17 +126,11 @@ def _deduplicate(rects: list[Rect]) -> list[Rect]:
 
 
 def _is_filled(binary: np.ndarray, rect: Rect) -> bool:
-    """Decide if a detected box is checked, from how much ink sits inside it.
-
-    Reuses the same black/white image the detection step built (ink = white) and
-    just measures the ink in the box interior, after trimming the border away.
-    """
+    """Reuse the binary image from detection (ink = white) to measure the box's fill."""
     x, y, w, h = rect
     inset_x = round(w * BORDER_INSET_RATIO)
     inset_y = round(h * BORDER_INSET_RATIO)
     inner = binary[y + inset_y : y + h - inset_y, x + inset_x : x + w - inset_x]
-    if inner.size == 0:
-        return False
 
     fill_ratio = np.count_nonzero(inner) / inner.size
     # bool() so the result is a plain Python bool, not numpy.bool_, which
