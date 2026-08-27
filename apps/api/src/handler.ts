@@ -14,14 +14,6 @@ export type CheckboxDetector = (input: {
 export const DETECTION_STRATEGIES = ['opencv', 'textract'] as const;
 export type DetectionStrategy = (typeof DETECTION_STRATEGIES)[number];
 
-export type AppBindings = {
-  Bindings: {
-    requestContext: {
-      checkboxDetectors: Record<DetectionStrategy, CheckboxDetector>;
-    };
-  };
-};
-
 // Multipart fields come in as strings, so width/height get turned into numbers.
 // Textract needs the pixel size to turn its ratio coords into the pixel bbox the
 // contract asks for; the opencv strategy decodes the image itself and ignores them.
@@ -41,31 +33,33 @@ const convertFileToBase64 = async (file: File): Promise<string> => {
   return Buffer.from(arrayBuffer).toString('base64');
 };
 
-/**
- * The Hono app for the API service.
- */
-export const app = new Hono<AppBindings>();
+export const createApp = (checkboxDetectors: Record<DetectionStrategy, CheckboxDetector>) => {
+  const app = new Hono();
 
-/**
- * The /detect endpoint accepts a multipart/form-data request with a `file` field
- * containing an image, plus an optional `strategy` (`opencv` default, or
- * `textract`) and, for `textract`, the image `width`/`height` in pixels. It
- * returns the detected checkboxes.
- */
-app.post('/detect', async (c) => {
-  const parsed = detectRequestSchema.safeParse(await c.req.parseBody());
-  if (!parsed.success) {
-    return c.json({ message: 'invalid request', issues: parsed.error.issues }, 400);
-  }
-
-  const { file, strategy, width, height } = parsed.data;
-  const imageBase64 = await convertFileToBase64(file);
-
-  const detect = c.env.requestContext.checkboxDetectors[strategy];
-  const result = await detect({
-    imageBase64,
-    imageSize: width && height ? { width, height } : undefined
+  // A detector that throws (bad AWS credentials, the detector Lambda erroring, a
+  // corrupt image that got past validation) is an upstream failure, not a 500 in
+  // this handler. Answer with a short message and no stack.
+  app.onError((err, c) => {
+    console.error('detection failed:', err);
+    return c.json({ message: 'checkbox detection failed' }, 502);
   });
 
-  return c.json(result);
-});
+  app.post('/detect', async (c) => {
+    const parsed = detectRequestSchema.safeParse(await c.req.parseBody());
+    if (!parsed.success) {
+      return c.json({ message: 'invalid request', issues: parsed.error.issues }, 400);
+    }
+
+    const { file, strategy, width, height } = parsed.data;
+    const imageBase64 = await convertFileToBase64(file);
+
+    const result = await checkboxDetectors[strategy]({
+      imageBase64,
+      imageSize: width && height ? { width, height } : undefined
+    });
+
+    return c.json(result);
+  });
+
+  return app;
+};

@@ -1,19 +1,12 @@
 import { AnalyzeDocumentCommand, type TextractClient } from '@aws-sdk/client-textract';
 import type { CheckboxDetector, DetectedBox } from './handler.js';
 
-/**
- * Returns a CheckboxDetector backed by AWS Textract.
- *
- * `AnalyzeDocument` with the FORMS and TABLES features returns a
- * `SELECTION_ELEMENT` block for every checkbox/radio button, each with a
- * `SelectionStatus` and a bounding box as ratios (0..1) of the page. TABLES is
- * requested too because Textract only returns selection elements inside table
- * cells when tables are asked for, and most appraisal checkboxes live in tables.
- * I scale the ratios to pixels with the image size the caller provides and treat
- * `SELECTED` as checked.
- * @param client The Textract client to use.
- * @returns A CheckboxDetector instance.
- */
+// `AnalyzeDocument` with the FORMS and TABLES features returns a `SELECTION_ELEMENT`
+// block for every checkbox/radio button, each with a `SelectionStatus` and a bounding
+// box as page ratios (0-1). TABLES is requested too: Textract only returns selection
+// elements inside table cells when it is asked for tables, and most appraisal checkboxes
+// sit in tables. I scale the ratios to pixels with the caller's image size and treat
+// `SELECTED` as checked.
 export const analyzeWithTextract = (client: TextractClient): CheckboxDetector => {
   return async ({ imageBase64, imageSize }) => {
     if (!imageSize) {
