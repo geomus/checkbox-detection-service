@@ -17,12 +17,18 @@ provider:
   name: aws
   runtime: nodejs24.x
   region: us-east-1
-  profile: personal
-  architecture: arm64 # matches what Docker builds on Apple Silicon, avoids Runtime.InvalidEntrypoint
-  timeout: 29 # httpApi hard-caps integration timeout at 30s, stay under it
+  profile: personal # local AWS CLI profile name, not a secret; override with --aws-profile to deploy under a different one
+  architecture: arm64
+  timeout: 29
   versionFunctions: false # no aliases/traffic-shifting here, skip the extra Version resources
   logRetentionInDays: 14
   runtimeManagement: onFunctionUpdate
+  # wildcard is fine here since /detect has no auth/cookies to protect, and the
+  # frontend will call this from a different origin (the S3 website endpoint).
+  # I'd scope this down to that exact origin once there's a stable domain in front
+  # of it (CloudFront), but not worth pinning to a bucket URL that might still move.
+  httpApi:
+    cors: true
   ecr:
     images:
       detector:
@@ -49,6 +55,12 @@ functions:
       - httpApi:
           path: /detect
           method: post
+          # no throttle on this route yet. It has to stay public/unauthenticated per
+          # the brief, so right now the only thing capping cost is API Gateway's
+          # account-wide default. I could add a per-route limit with a raw
+          # CloudFormation RouteSettings override (httpApi doesn't expose it as a
+          # plain config key), but I'd rather pick a real number once I've seen
+          # actual traffic than guess.
 
   detector:
     image:
