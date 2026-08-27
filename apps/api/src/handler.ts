@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 
 export type DetectedBox = {
   bbox: [number, number, number, number];
@@ -7,24 +8,38 @@ export type DetectedBox = {
 
 export type CheckboxDetector = (input: {
   imageBase64: string;
+  imageSize?: { width: number; height: number };
 }) => Promise<{ boxes: DetectedBox[] }>;
+
+export const DETECTION_STRATEGIES = ['opencv', 'textract'] as const;
+export type DetectionStrategy = (typeof DETECTION_STRATEGIES)[number];
 
 export type AppBindings = {
   Bindings: {
     requestContext: {
-      checkboxDetector: CheckboxDetector;
+      checkboxDetectors: Record<DetectionStrategy, CheckboxDetector>;
     };
   };
 };
 
-const validateFile = (file: unknown): file is File => {
-  return file instanceof File;
-}
+// Multipart fields come in as strings, so width/height get turned into numbers.
+// Textract needs the pixel size to turn its ratio coords into the pixel bbox the
+// contract asks for; the opencv strategy decodes the image itself and ignores them.
+const detectRequestSchema = z
+  .object({
+    file: z.instanceof(File, { error: 'file must be an uploaded image' }),
+    strategy: z.enum(DETECTION_STRATEGIES).default('opencv'),
+    width: z.coerce.number().int().positive().optional(),
+    height: z.coerce.number().int().positive().optional()
+  })
+  .refine((v) => v.strategy !== 'textract' || (v.width !== undefined && v.height !== undefined), {
+    error: 'width and height are required when strategy is "textract"'
+  });
 
 const convertFileToBase64 = async (file: File): Promise<string> => {
   const arrayBuffer = await file.arrayBuffer();
   return Buffer.from(arrayBuffer).toString('base64');
-}
+};
 
 /**
  * The Hono app for the API service.
@@ -32,24 +47,25 @@ const convertFileToBase64 = async (file: File): Promise<string> => {
 export const app = new Hono<AppBindings>();
 
 /**
- * The /detect endpoint accepts a multipart/form-data request with a file field
- * containing an image. It returns the detected checkboxes in the image.
- * @param c The Hono context object.
- * @returns A JSON response with the detected checkboxes.
+ * The /detect endpoint accepts a multipart/form-data request with a `file` field
+ * containing an image, plus an optional `strategy` (`opencv` default, or
+ * `textract`) and, for `textract`, the image `width`/`height` in pixels. It
+ * returns the detected checkboxes.
  */
 app.post('/detect', async (c) => {
-  const body = await c.req.parseBody();
-  const file = body['file'];
-
-  // no size/content-type check yet, so a huge or non-image upload reaches the
-  // detector invoke below instead of failing fast here with a clean 400. zod's
-  // already a dependency for exactly this, just haven't wired it up yet.
-  if (!validateFile(file)) {
-    return c.json({ message: 'file is required' }, 400);
+  const parsed = detectRequestSchema.safeParse(await c.req.parseBody());
+  if (!parsed.success) {
+    return c.json({ message: 'invalid request', issues: parsed.error.issues }, 400);
   }
 
+  const { file, strategy, width, height } = parsed.data;
   const imageBase64 = await convertFileToBase64(file);
-  const result = await c.env.requestContext.checkboxDetector({ imageBase64 });
+
+  const detect = c.env.requestContext.checkboxDetectors[strategy];
+  const result = await detect({
+    imageBase64,
+    imageSize: width && height ? { width, height } : undefined
+  });
 
   return c.json(result);
 });

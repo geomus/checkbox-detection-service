@@ -209,6 +209,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aws-sdk/client-textract@npm:^3.1118.0":
+  version: 3.1118.0
+  resolution: "@aws-sdk/client-textract@npm:3.1118.0"
+  dependencies:
+    "@aws-sdk/core": "npm:^3.977.9"
+    "@aws-sdk/credential-provider-node": "npm:^3.972.81"
+    "@aws-sdk/types": "npm:^3.974.5"
+    "@smithy/core": "npm:^3.33.3"
+    "@smithy/fetch-http-handler": "npm:^5.7.2"
+    "@smithy/node-http-handler": "npm:^4.11.3"
+    "@smithy/types": "npm:^4.17.2"
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/9ab4a72d0753c3e697bf4d7550bdcfa69b0818863111024a1ddc682f713853ee1fa9f12900b2c0fe48bf684abb0b8cd260c8a4c5b24c9c86d7418347b3c968da
+  languageName: node
+  linkType: hard
+
 "@aws-sdk/core@npm:^3.977.9":
   version: 3.977.9
   resolution: "@aws-sdk/core@npm:3.977.9"

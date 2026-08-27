@@ -41,6 +41,11 @@ provider:
           # built as a string, not !GetAtt, so this role doesn't depend on the
           # detector function that itself depends on this same shared role
           Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:custom.detectorFunctionName}'
+        - Effect: Allow
+          Action: textract:AnalyzeDocument
+          # used only by the opt-in strategy=textract path; Textract's sync API
+          # can't be scoped to a resource, so * is what the AWS docs tell you to use
+          Resource: '*'
 
 functions:
   api:
