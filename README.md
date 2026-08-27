@@ -9,11 +9,11 @@ apps/
   api/        Node.js + TypeScript + Hono API (AWS Lambda)
   web/        React + Vite + TypeScript frontend
 services/
-  detector/   Python + OpenCV checkbox detection
-infra/        Serverless Framework config
+  detector/   Python + OpenCV checkbox detection (Lambda container image)
 docs/
   adr/        Architecture decision records
   challenge/  Original brief + sample images
+serverless.yml  Serverless Framework config (both functions + frontend bucket)
 ```
 
 ![Architecture overview](docs/images/architecture-excalidraw.png)
@@ -24,39 +24,63 @@ docs/
 
 - Node.js 24.x (`.nvmrc` pins this)
 - Corepack enabled (`corepack enable`), manages the pinned Yarn Berry version, see `package.json`
-  **To run the full stack locally (API + detector):** everything above, plus:
+
+**To run the full stack locally (API + detector):** everything above, plus:
+
 - Python 3.13, managed with `pyenv`, scoped to `services/detector`
-- Some AWS credentials present in the environment — even placeholder ones (e.g. `AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local`). `serverless-offline` and the Serverless Framework CLI check that _something_ is configured at startup, but nothing in local dev ever calls real AWS. **No real AWS account is needed to develop or run this locally.**
-  **To deploy:**
+- Some AWS credentials present in the environment, even placeholder ones (e.g. `AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local`). `serverless-offline` checks that _something_ is configured at startup, but the default `opencv` detection path never calls real AWS. (`strategy=textract` does, see the API contract below.)
+
+**To deploy:**
+
 - A real AWS account and a configured AWS CLI/SSO profile
 - Docker Desktop, only needed here, to build the detector's container image for ECR
 
 ## Setup
 
 ```bash
-git clone <repo-url> // TODO: add repo URL
+git clone https://github.com/geomus/checkbox-detection-service.git
 cd checkbox-detection-service
 corepack enable
 yarn install
-```
 
-TODO: `services/detector` Python environment setup (pyenv + venv) once that package has real code.
+# detector Python environment (needed for local dev and `yarn test`)
+cd services/detector
+python -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+cd ../..
+```
 
 ## Running locally
 
-TODO — not implemented yet. The API will run through `serverless-offline`, the detector through a small local Python dev server. `apps/web` alone is already runnable:
+```bash
+yarn dev
+```
+
+Runs `serverless-offline` (the API, on `:3000`) and the detector's local Python
+shim (`:8000`) together. Then:
 
 ```bash
-yarn workspace web run dev
+curl -F file=@docs/challenge/sample-images/document-1.jpg http://localhost:3000/detect
 ```
 
 ## Testing
 
-TODO — not implemented yet.
+```bash
+yarn test
+```
+
+Runs the frontend unit tests (Vitest) and the detector suite (`pytest` against the
+four sample forms). The detector venv from **Setup** must exist first.
 
 ## Deployment
 
-TODO — not implemented yet. Will be a single `yarn deploy` covering both Lambda functions and the frontend's S3 bucket — see `docs/adr/0001-initial-architecture-decisions.md`.
+```bash
+yarn deploy
+```
+
+Builds the workspaces and runs `serverless deploy`: both Lambda functions (the
+Node API zip and the Python detector container image) and the frontend's S3
+bucket, in one CloudFormation stack. See `docs/adr/0001-initial-architecture-decisions.md`.
 
 ## API contract
 
@@ -64,9 +88,8 @@ TODO — not implemented yet. Will be a single `yarn deploy` covering both Lambd
 POST /detect
 ```
 
-Input: an image file upload.
-
-Output:
+Multipart upload: `file` (the image), optional `strategy` (`opencv` default, or
+`textract`), and (for `textract` only) the image's pixel `width` and `height`.
 
 ```json
 {
@@ -80,7 +103,8 @@ Output:
 ## Architecture decisions
 
 - [ADR-0001: Initial architecture decisions](docs/adr/0001-initial-architecture-decisions.md)
+- [ADR-0002: Build, buy, or train the checkbox detector](docs/adr/0002-checkbox-detection-build-vs-buy.md)
 
 ## Approach, trade-offs and limitations
 
-TBD — written up once the detector is implemented and tested against the sample images in `docs/challenge/sample-images/`.
+See [docs/detection-approach.md](docs/detection-approach.md).
