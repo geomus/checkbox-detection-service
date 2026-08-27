@@ -41,39 +41,24 @@ edge to exclude the border strokes, and measure the fraction of ink pixels. Abov
 `FILL_RATIO_THRESHOLD` (0.12) it is checked. An X or a tick covers well above
 that; an empty box is near zero.
 
-## Trade-offs
+## Limitations
 
-- **Classical CV, not a model.** Every line is explainable in a review and needs
-  no training data. The cost is a lower accuracy ceiling on layouts I have not
-  seen. See `docs/adr/0001-initial-architecture-decisions.md` section 3. The
-  brief states perfect accuracy is not expected.
-- **Reimplemented, not `boxdetect`.** The PyPI `boxdetect` package does almost
-  this exact pipeline, but depending on it would mean standing behind code I did
-  not write, and it is unmaintained since 2023 (pre-NumPy 2). It is ~100 lines to
-  do myself.
-- **Pixel-size thresholds are DPI-dependent.** The four samples run ~240-470 DPI,
-  where a checkbox is ~30-75 px. `MIN/MAX_BOX_SIDE_PX` (12-90) covers that with
-  margin, at the cost of some false positives from small table cells or capital
-  letters. Reading DPI from the file metadata was rejected - scans often report a
-  wrong value. `TODO` in `detection.py`: make the thresholds request parameters.
-- **Native-resolution processing** is simple and fast enough here (largest
-  sample ~10 MP). A much larger image would want downscaling plus coordinate
-  rescaling.
+- Pixel-size thresholds are DPI-dependent: `MIN/MAX_BOX_SIDE_PX` (12-90) fits the
+  ~240-470 DPI samples, at the cost of some false positives from small table
+  cells or capital letters. `TODO` in `detection.py`: make them request params.
+- The image is processed at native resolution (largest sample ~10 MP). A much
+  larger image would want downscaling plus coordinate rescaling.
+- Checkboxes drawn without a printed border are missed - step 3 needs a 4-sided
+  outline. A box crossed by a long pen stroke or table rule can fail it too.
+- Fill ratio can't tell a deliberate mark from a smudge or bleed-through; a box
+  near the 0.12 threshold can go either way.
+- Radio buttons (circles) are intentionally not detected, and there are no field
+  labels (see the `TODO` in `detection.py`).
 
-## Known limitations
-
-- Checkboxes with no printed border (underline-only or shaded-cell fields) are
-  missed - step 3 needs a 4-sided outline.
-- A box crossed by a long pen stroke or table rule can fail the shape filter.
-- Fill ratio does not tell a deliberate mark from a smudge or bleed-through; a
-  very lightly dotted box near the 0.12 threshold can go either way.
-- Radio buttons (circles) are intentionally not detected.
-- No field labels - the response says where each box is and whether it is
-  filled, not which question it answers. Adding them needs OCR + a spatial
-  pairing heuristic; options and costs are in the `TODO` in `detection.py`.
-
-Configurable thresholds, PDF input and async processing are covered in
-[`docs/detection-approach.md`](../../docs/detection-approach.md).
+Why classical CV over Textract or a trained model, and configurable thresholds /
+PDF / async, are in
+[`docs/detection-approach.md`](../../docs/detection-approach.md) and
+[`docs/adr/0002`](../../docs/adr/0002-checkbox-detection-build-vs-buy.md).
 
 ## Running it
 

@@ -1,92 +1,89 @@
 # Checkbox detection: approach, trade-offs, limitations
 
-This is the write-up the brief asks for. It covers what the service does, the two
-detection strategies and when to use each, the known limitations of both, and how
-this scales past a demo.
+The write-up the brief asks for: what the service does, the two detection
+strategies and when to reach for each, what each one can't do, and how this
+scales past a demo.
 
 ## What it does
 
-`POST /detect` takes a multipart upload:
+`POST /detect` takes a multipart upload. The `file` field is the document image
+(JPEG or PNG). An optional `strategy` field selects the detector: `opencv` (the
+default) or `textract`. When `strategy` is `textract`, the request must also
+carry the image's pixel `width` and `height`, because Textract returns
+coordinates as ratios of the page and the response needs pixels.
 
-| field | required | notes |
-|---|---|---|
-| `file` | yes | the document image (JPEG or PNG) |
-| `strategy` | no | `opencv` (default) or `textract` |
-| `width`, `height` | only for `textract` | the image's pixel size |
-
-and returns
+The response is the contract from the brief:
 
 ```json
 { "boxes": [ { "bbox": [x1, y1, x2, y2], "is_checked": true }, ... ] }
 ```
 
 `bbox` is the top-left and bottom-right pixel coordinates of each detected
-checkbox. Per the brief, perfect accuracy is not expected.
+checkbox. Perfect accuracy isn't expected.
 
-The API is a functional core (`apps/api/src/handler.ts`) plus an imperative shell
-(`lambda.ts`). Both strategies implement one `CheckboxDetector` interface; the
-shell builds the two and injects them as a map, and the validated `strategy`
-field picks which one runs. Adding a third strategy later is a new file plus one
-map entry.
+The API is a pure core (`apps/api/src/handler.ts`) that validates the request
+with Zod and calls whichever detector it was handed, plus an imperative shell
+(`lambda.ts`) that builds the AWS clients. See ADR-0001 section 1.
 
-## Strategy 1 — classical computer vision (default)
+## The classical-CV strategy (default)
 
-A small OpenCV pipeline in `services/detector/` (Python Lambda). Grayscale →
-adaptive threshold → find contours → keep the ones shaped like a small square
-box → drop duplicate outlines → measure the ink inside each to call it
-checked/unchecked. Full detail and the tuning constants are in
+A small OpenCV pipeline in `services/detector/`: grayscale, adaptive threshold,
+find contours, keep the ones shaped like a small square box, drop duplicate
+outlines, then measure the ink inside each to call it checked or unchecked. The
+full detail and the tuning constants are in
 [`services/detector/README.md`](../services/detector/README.md).
 
-- **Use it when:** you want zero per-call cost, deterministic output, or offline
-  operation, and the documents look roughly like the samples (~200–500 DPI
-  scans with printed box outlines).
-- **Limits:** pixel-size thresholds are tuned to that DPI range and would need
-  re-tuning elsewhere; boxes with no printed border are missed; a box crossed by
-  a pen stroke or table rule can fail the shape filter; it produces no field
-  labels.
+Reach for this when you want zero per-call cost, deterministic output, or offline
+operation, and the documents look roughly like the samples: 200-500 DPI scans
+with printed box outlines. It won't find boxes drawn without a printed border, a
+box crossed by a long pen stroke or table rule can slip past the shape filter,
+the pixel thresholds are tuned to that DPI range, and it produces no field
+labels.
 
-## Strategy 2 — AWS Textract (`strategy=textract`)
+## The Textract strategy (`strategy=textract`)
 
-One `AnalyzeDocument` call with `FeatureTypes: ['FORMS']`
+One `AnalyzeDocument` call with `FeatureTypes: ['FORMS', 'TABLES']`
 (`apps/api/src/textract-client.ts`). Textract returns a `SELECTION_ELEMENT` block
-for every checkbox/radio button with a `SelectionStatus` and a bounding box given
-as ratios of the page; we scale those to pixels with the supplied `width`/`height`
-and map `SELECTED` → `is_checked: true`.
+for every checkbox with a `SelectionStatus` and a page-ratio bounding box; the
+adapter scales those to pixels with the supplied `width`/`height` and maps
+`SELECTED` to `is_checked`. TABLES is in the request because Textract only returns
+the selection elements it finds inside table cells when tables are asked for, and
+on an appraisal form most checkboxes are in tables - with `FORMS` alone it drops
+them.
 
-- **Use it when:** the layout is unfamiliar and accuracy matters more than cost —
-  Textract generalises far better than hand-tuned thresholds.
-- **Limits:** ~$0.05 per page (FORMS, no free tier); needs the `textract:AnalyzeDocument`
-  IAM grant and a network round-trip in the request path; there is no local
-  emulation, so `strategy=textract` calls the real service even in local dev and
-  needs AWS credentials; synchronous `AnalyzeDocument` handles single-page images
-  only (PDF/multipage needs the async API — see Scale).
+Reach for this when the layouts vary and re-tuning the CV thresholds per template
+is not viable: Textract needs no per-layout tuning. It is not more accurate on
+these four samples - with both feature types it lands about level with the
+classical pipeline. It costs about six and a half cents a page (FORMS $0.05 plus
+TABLES $0.015, billed additively, no free tier), needs the
+`textract:AnalyzeDocument` IAM grant and a network round-trip, and has no local
+emulation, so `strategy=textract` calls the real service even in local dev and
+needs AWS credentials. Synchronous `AnalyzeDocument` handles single-page images
+only; multi-page PDFs need the asynchronous API (see Scale).
 
 ## Choosing between them
 
-Full reasoning in [`docs/adr/0002-checkbox-detection-build-vs-buy.md`](adr/0002-checkbox-detection-build-vs-buy.md).
-Short version: the default is `opencv` because it is free and needs nothing
-external, which is right for a demo and for anyone who cannot take a per-page
-cost. In production, once volume and accuracy needs are real, `textract` is the
-better default, with the classical path kept as a zero-cost fallback and for
-air-gapped processing. Training a bespoke model was rejected — there is no
-labelled data for it and synthesising some is too much risk for this window.
+The default is `opencv` because it's free and self-contained, which suits a demo.
+In production I'd flip that once volume and layout variety justify the spend,
+keeping the classical path as the zero-cost fallback. The full build-vs-buy reasoning,
+including why not a trained model, is in
+[`docs/adr/0002-checkbox-detection-build-vs-buy.md`](adr/0002-checkbox-detection-build-vs-buy.md).
 
 ## Scale
 
-Neither strategy runs synchronously behind API Gateway at real volume:
+Neither strategy runs synchronously behind API Gateway at real volume. API
+Gateway HTTP APIs cap at a 29-second integration timeout; a synchronous
+Lambda-to-Lambda invoke caps the payload at 6 MB, which a large scan approaches
+once base64-encoded; and Textract's synchronous call is single-page, so
+multi-page PDFs need `StartDocumentAnalysis` / `GetDocumentAnalysis`, which are
+asynchronous by design.
 
-- API Gateway HTTP APIs cap at a 29 s integration timeout.
-- A synchronous Lambda-to-Lambda invoke caps the payload at 6 MB; a large scan
-  base64-encodes close to that.
-- Textract's synchronous `AnalyzeDocument` is single-page; multi-page PDFs need
-  `StartDocumentAnalysis` + `GetDocumentAnalysis`, which are async by design.
-
-The async design (not built here, flagged as the next step): `POST /detect`
-stores the upload in S3 and enqueues an SQS message with the object key and
-chosen strategy, then returns a job id. A worker Lambda consumes the queue, runs
-the detector, and writes the result (S3 or DynamoDB). The client polls
-`GET /detect/{id}` or receives a push. This is the standard S3 + SQS + worker
-shape and keeps the public endpoint fast and failure-isolated.
+The shape that does hold: `POST /detect` stores the upload in S3 and puts the
+object key plus the chosen strategy on an SQS queue, then returns a job id. A
+worker Lambda drains the queue, runs the detector, and writes the result to S3 or
+DynamoDB. The client polls `GET /detect/{id}` or gets a push. This keeps the
+public endpoint fast and isolates it from a slow or failing detector. Not built
+here.
 
 ## Trying it
 
@@ -94,8 +91,7 @@ shape and keeps the public endpoint fast and failure-isolated.
 yarn dev   # API on :3000, opencv detector shim on :8000
 
 # default (opencv, offline)
-curl -F file=@docs/challenge/sample-images/document-1.jpg \
-  http://localhost:3000/detect
+curl -F file=@docs/challenge/sample-images/document-1.jpg http://localhost:3000/detect
 
 # textract (needs AWS credentials; pass the image's pixel size)
 curl -F file=@docs/challenge/sample-images/document-2.jpg \
@@ -104,4 +100,4 @@ curl -F file=@docs/challenge/sample-images/document-2.jpg \
 ```
 
 `services/detector/.venv/bin/python scripts/visualize_detections.py` renders the
-opencv strategy's output onto the sample forms for a visual check.
+classical strategy's output onto the sample forms for a visual check.
