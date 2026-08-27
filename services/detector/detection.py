@@ -35,6 +35,14 @@ ASPECT_TOLERANCE = 0.35
 # and handwriting usually do not, so this rejects a lot of noise.
 MIN_RECT_FILL = 0.80
 
+# Share of the box interior that must be ink for it to count as checked. A drawn
+# X or tick covers well above this; a clean empty box is close to zero.
+FILL_RATIO_THRESHOLD = 0.12
+
+# Fraction trimmed off each side before measuring the fill, so the box's own
+# border strokes are not counted as if they were a mark.
+BORDER_INSET_RATIO = 0.18
+
 # Adaptive-threshold parameters. Block size is the neighbourhood (in px) used to
 # pick a local cutoff and must be odd; C is subtracted from that local mean, so
 # a higher C marks fewer pixels as ink.
@@ -49,22 +57,24 @@ def detect_checkboxes(image_bytes: bytes) -> list[dict]:
     """Find every checkbox-like square in an image.
 
     Returns a list of ``{"bbox": [x1, y1, x2, y2], "is_checked": bool}`` dicts
-    with coordinates in the original image's pixel space. Classification is
-    added in the next commit, so ``is_checked`` is always ``False`` for now.
+    with coordinates in the original image's pixel space.
     """
     gray = _load_grayscale(image_bytes)
     binary = _binarize(gray)
     candidates = _find_square_candidates(binary)
     boxes = _deduplicate(candidates)
 
-    # TODO: the response gives the box location and (next commit) whether it is
-    # filled, but not which field it belongs to ("Owner", "Fee Simple", ...).
-    # That needs OCR of the nearby text plus a spatial pairing heuristic.
-    # Options, cheapest first: Tesseract bundled in this container ($0), Textract
-    # DetectDocumentText (~$1.50 / 1000 pages), or Textract AnalyzeDocument FORMS
-    # (~$50 / 1000 pages, which returns labels and selection state directly).
-    # Would ship behind an opt-in flag so the base response and cost are unchanged.
-    return [{"bbox": [x, y, x + w, y + h], "is_checked": False} for (x, y, w, h) in boxes]
+    # TODO: the response gives the box location and whether it is filled, but not
+    # which field it belongs to ("Owner", "Fee Simple", ...). That needs OCR of
+    # the nearby text plus a spatial pairing heuristic. Options, cheapest first:
+    # Tesseract bundled in this container ($0), Textract DetectDocumentText
+    # (~$1.50 / 1000 pages), or Textract AnalyzeDocument FORMS (~$50 / 1000
+    # pages, which returns labels and selection state directly). Would ship
+    # behind an opt-in flag so the base response and cost are unchanged.
+    return [
+        {"bbox": [x, y, x + w, y + h], "is_checked": _is_filled(binary, (x, y, w, h))}
+        for (x, y, w, h) in boxes
+    ]
 
 
 def _load_grayscale(image_bytes: bytes) -> np.ndarray:
@@ -138,3 +148,22 @@ def _deduplicate(rects: list[Rect]) -> list[Rect]:
         if not inside_existing:
             kept.append((x, y, w, h))
     return kept
+
+
+def _is_filled(binary: np.ndarray, rect: Rect) -> bool:
+    """Decide if a detected box is checked, from how much ink sits inside it.
+
+    Reuses the same black/white image the detection step built (ink = white) and
+    just measures the ink in the box interior, after trimming the border away.
+    """
+    x, y, w, h = rect
+    inset_x = round(w * BORDER_INSET_RATIO)
+    inset_y = round(h * BORDER_INSET_RATIO)
+    inner = binary[y + inset_y : y + h - inset_y, x + inset_x : x + w - inset_x]
+    if inner.size == 0:
+        return False
+
+    fill_ratio = np.count_nonzero(inner) / inner.size
+    # bool() so the result is a plain Python bool, not numpy.bool_, which
+    # json.dumps in the handler cannot serialize.
+    return bool(fill_ratio > FILL_RATIO_THRESHOLD)
