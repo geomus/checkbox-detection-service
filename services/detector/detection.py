@@ -5,7 +5,15 @@ bounding box of every checkbox-like square it finds. No AWS, no file or network
 I/O, no environment lookups. ``handler.py`` is the only place that talks to the
 outside world.
 
-See ``README.md`` in this folder for the pipeline, the reasoning and the known
+The pipeline is the standard OpenCV recipe for this (contour detection plus a
+fill-ratio check):
+
+  1. decode the image to grayscale
+  2. threshold to black/white with a local (adaptive) cutoff
+  3. find contours, keep the ones shaped like a small, roughly square box
+  4. drop duplicates (a drawn square gives an inner and an outer contour)
+
+``README.md`` in this folder has the references, the reasoning and the known
 limitations.
 """
 
@@ -62,6 +70,9 @@ def detect_checkboxes(image_bytes: bytes) -> list[dict]:
 
 
 def _load_grayscale(image_bytes: bytes) -> np.ndarray:
+    """Decode raw bytes to a grayscale array. cv2.imdecode reports "not an image"
+    by returning None instead of raising, so this is where bad input becomes a
+    ValueError."""
     buffer = np.frombuffer(image_bytes, dtype=np.uint8)
     gray = cv2.imdecode(buffer, cv2.IMREAD_GRAYSCALE)
     if gray is None:
@@ -86,6 +97,10 @@ def _find_square_candidates(binary: np.ndarray) -> list[Rect]:
 
 
 def _looks_like_box(contour: np.ndarray) -> bool:
+    """True when the contour is a closed, convex, 4-cornered outline that is
+    roughly square and within checkbox pixel-size range."""
+    # Blind to a box merged with hand ink (cross-outs) or with its printed
+    # outline erased. See the Limitations section in README.md.
     perimeter = cv2.arcLength(contour, closed=True)
     # approxPolyDP simplifies the outline; a clean rectangle collapses to 4 points.
     corners = cv2.approxPolyDP(contour, 0.02 * perimeter, closed=True)

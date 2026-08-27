@@ -21,6 +21,13 @@ the only part that touches the outside world; `detection.py` is a pure function.
 
 ## How it works
 
+This is the standard OpenCV recipe for the problem (contour detection plus a
+fill-ratio check), as laid out in FuzzyLabs'
+[Checkbox Detection with OpenCV](https://www.fuzzylabs.ai/blog-post/checkbox-detection-with-opencv)
+and the [OpenCV contour tutorial](https://learnopencv.com/contour-detection-using-opencv-python-c/).
+The code in `detection.py` is my own implementation of it, not a dependency (see
+`docs/adr/0002`).
+
 `detect_checkboxes(image_bytes)` runs four steps (`detection.py`):
 
 1. **Grayscale decode** - `cv2.imdecode(..., IMREAD_GRAYSCALE)`. The image is
@@ -36,7 +43,7 @@ the only part that touches the outside world; `detection.py` is a pure function.
    table cells share borders, so any box whose center sits inside a larger kept
    box is dropped.
 
-**Classification** (`_is_filled`): crop the box interior, trim ~18% off each
+**Classification** (`_classify`): crop the box interior, trim ~18% off each
 edge to exclude the border strokes, and measure the fraction of ink pixels. Above
 `FILL_RATIO_THRESHOLD` (0.12) it is checked. An X or a tick covers well above
 that; an empty box is near zero.
@@ -49,7 +56,16 @@ that; an empty box is near zero.
 - The image is processed at native resolution (largest sample ~10 MP). A much
   larger image would want downscaling plus coordinate rescaling.
 - Checkboxes drawn without a printed border are missed - step 3 needs a 4-sided
-  outline. A box crossed by a long pen stroke or table rule can fail it too.
+  outline. A box crossed by a long hand stroke also fails it (e.g. the crossed-out
+  "No Zoning" on `document-2`): the border stops being a closed contour. That one
+  is recoverable with a horizontal/vertical morphology pass to rebuild the box
+  edges (roughly what `boxdetect` does), not done here - it adds a second
+  candidate pass and cross-dedup for a case whose checked/unchecked answer is
+  itself ambiguous.
+- A box whose outline and mark have both been erased (e.g. Electricity "Public" on
+  `document-2`) is below what threshold-based outline detection can catch without
+  losing precision everywhere. Recovering it would need layout-aware templating,
+  which is out of scope for a general detector.
 - Fill ratio can't tell a deliberate mark from a smudge or bleed-through; a box
   near the 0.12 threshold can go either way.
 - Radio buttons (circles) are intentionally not detected, and there are no field
