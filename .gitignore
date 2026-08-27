@@ -50,6 +50,9 @@ ENV/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Output of scripts/visualize_detections.py
+detection-preview/
 .coverage
 .coverage.*
 htmlcov/

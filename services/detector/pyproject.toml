@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+# Let tests import handler.py / detection.py directly, without packaging them.
+pythonpath = ["."]
+testpaths = ["tests"]

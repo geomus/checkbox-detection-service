@@ -1,58 +1,53 @@
 {
-  "document1.png": {
-    "min_boxes_detected": 15,
-    "known_checked": [
-      "Owner",
-      "Fee Simple",
-      "Refinance Transaction",
-      "Existing"
-    ],
-    "known_unchecked": [
-      "Tenant",
-      "Vacant",
-      "Leasehold",
-      "Purchase Transaction"
+  "_comment": "Hand-verified expectations for the four sample forms. min_boxes_detected is a conservative floor (roughly half of what the current detector finds), not a target. anchors are specific checkboxes whose pixel bbox and checked/unchecked state were confirmed by eye; a test passes when some detected box overlaps the anchor (IoU > 0.3) with the same is_checked. label is documentation only, never asserted on.",
+  "document-1.jpg": {
+    "min_boxes_detected": 60,
+    "anchors": [
+      { "label": "Occupant: Owner", "bbox": [330, 507, 386, 553], "is_checked": true },
+      { "label": "Occupant: Tenant", "bbox": [488, 507, 545, 553], "is_checked": false },
+      { "label": "Occupant: Vacant", "bbox": [648, 507, 704, 553], "is_checked": false },
+      { "label": "Property Rights: Fee Simple", "bbox": [537, 557, 594, 603], "is_checked": true },
+      { "label": "Property Rights: Leasehold", "bbox": [806, 557, 863, 603], "is_checked": false },
+      { "label": "Assignment Type: Purchase Transaction", "bbox": [439, 607, 496, 653], "is_checked": false },
+      { "label": "Assignment Type: Refinance Transaction", "bbox": [794, 607, 851, 653], "is_checked": true },
+      { "label": "Improvements: Existing", "bbox": [174, 2809, 231, 2855], "is_checked": true }
     ]
   },
-  "document2.png": {
-    "min_boxes_detected": 12,
-    "known_checked": [
-      "Suburban",
-      "Increasing",
-      "Shortage",
-      "No"
-    ],
-    "known_unchecked": [
-      "Urban",
-      "Rural",
-      "Stable",
-      "Declining"
+  "document-2.jpg": {
+    "min_boxes_detected": 20,
+    "anchors": [
+      { "label": "Location: Urban", "bbox": [155, 96, 180, 120], "is_checked": false },
+      { "label": "Location: Suburban", "bbox": [282, 96, 306, 120], "is_checked": true },
+      { "label": "Location: Rural", "bbox": [414, 96, 438, 120], "is_checked": false },
+      { "label": "Property Values: Increasing", "bbox": [692, 96, 717, 120], "is_checked": true },
+      { "label": "Property Values: Stable", "bbox": [847, 96, 871, 120], "is_checked": false },
+      { "label": "Property Values: Declining", "bbox": [979, 96, 1003, 120], "is_checked": false },
+      { "label": "Demand/Supply: Shortage", "bbox": [692, 126, 717, 150], "is_checked": true },
+      { "label": "Adverse site conditions: No", "bbox": [1263, 734, 1287, 758], "is_checked": true }
     ]
   },
-  "document3.png": {
-    "min_boxes_detected": 15,
-    "known_checked": [
-      "Seller financial assistance prevalent: Yes",
-      "Foreclosure sales (REO) factor: Yes"
-    ],
-    "known_unchecked": [
-      "Seller financial assistance prevalent: No",
-      "Foreclosure sales (REO) factor: No"
+  "document-3.jpg": {
+    "min_boxes_detected": 24,
+    "anchors": [
+      { "label": "Inventory trend, Total Comparable Sales (Settled): Increasing", "bbox": [1763, 804, 1816, 849], "is_checked": true },
+      { "label": "Seller financial assistance prevalent: Yes", "bbox": [1150, 1304, 1203, 1349], "is_checked": true },
+      { "label": "Seller financial assistance prevalent: No", "bbox": [1363, 1304, 1416, 1349], "is_checked": false },
+      { "label": "Foreclosure sales (REO) a factor: Yes", "bbox": [963, 1654, 1016, 1699], "is_checked": true },
+      { "label": "Foreclosure sales (REO) a factor: No", "bbox": [1113, 1654, 1166, 1699], "is_checked": false },
+      { "label": "Condo/co-op section, foreclosures a factor: Yes (blank form area)", "bbox": [961, 2903, 1017, 2951], "is_checked": false }
     ]
   },
-  "document4.png": {
-    "min_boxes_detected": 18,
-    "known_checked": [
-      "Owner",
-      "Fee Simple",
-      "Suburban",
-      "No"
-    ],
-    "known_unchecked": [
-      "Tenant",
-      "Vacant",
-      "Leasehold",
-      "Urban"
+  "document-4.jpg": {
+    "min_boxes_detected": 40,
+    "anchors": [
+      { "label": "Occupant: Owner", "bbox": [456, 398, 488, 429], "is_checked": true },
+      { "label": "Occupant: Tenant", "bbox": [590, 398, 621, 429], "is_checked": false },
+      { "label": "Occupant: Vacant", "bbox": [729, 398, 761, 429], "is_checked": false },
+      { "label": "Property Rights: Fee Simple", "bbox": [632, 477, 663, 507], "is_checked": true },
+      { "label": "Property Rights: Leasehold", "bbox": [826, 476, 858, 507], "is_checked": false },
+      { "label": "Location: Urban", "bbox": [447, 1302, 479, 1334], "is_checked": false },
+      { "label": "Location: Suburban", "bbox": [609, 1302, 641, 1334], "is_checked": true },
+      { "label": "Location: Rural", "bbox": [778, 1302, 810, 1334], "is_checked": false }
     ]
   }
 }

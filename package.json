@@ -16,7 +16,8 @@
   "scripts": {
     "dev": "yarn workspace api run build && node scripts/dev.mjs",
     "build": "yarn workspaces foreach --all run build",
-    "test": "yarn workspaces foreach --all run test",
+    "test": "yarn workspaces foreach --all run test && yarn test:detector",
+    "test:detector": "cd services/detector && .venv/bin/python -m pytest",
     "lint": "yarn workspaces foreach --all run lint",
     "deploy": "yarn build && yarn serverless deploy",
     "prepare": "husky"
