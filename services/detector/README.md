@@ -1,7 +1,13 @@
-# Detector service - approach, trade-offs, limitations
+# Detector service - the classical-CV strategy
 
 Classical computer vision that finds every checkbox in a scanned appraisal form
 and marks each one checked or unchecked. No machine learning, no training data.
+
+This is one of two detection strategies (the default one). For the overview, the
+Textract strategy, the build-vs-buy reasoning and the scale path, see
+[`docs/detection-approach.md`](../../docs/detection-approach.md) and
+[`docs/adr/0002`](../../docs/adr/0002-checkbox-detection-build-vs-buy.md). This
+file is the implementation detail for the OpenCV pipeline only.
 
 ## Contract
 
@@ -38,12 +44,13 @@ that; an empty box is near zero.
 ## Trade-offs
 
 - **Classical CV, not a model.** Every line is explainable in a review and needs
-  no training data. The cost is a lower accuracy ceiling on layouts we have not
+  no training data. The cost is a lower accuracy ceiling on layouts I have not
   seen. See `docs/adr/0001-initial-architecture-decisions.md` section 3. The
   brief states perfect accuracy is not expected.
 - **Reimplemented, not `boxdetect`.** The PyPI `boxdetect` package does almost
-  this exact pipeline, but depending on it would mean standing behind code we did
-  not write. It is ~100 lines to do ourselves.
+  this exact pipeline, but depending on it would mean standing behind code I did
+  not write, and it is unmaintained since 2023 (pre-NumPy 2). It is ~100 lines to
+  do myself.
 - **Pixel-size thresholds are DPI-dependent.** The four samples run ~240-470 DPI,
   where a checkbox is ~30-75 px. `MIN/MAX_BOX_SIDE_PX` (12-90) covers that with
   margin, at the cost of some false positives from small table cells or capital
@@ -62,19 +69,11 @@ that; an empty box is near zero.
   very lightly dotted box near the 0.12 threshold can go either way.
 - Radio buttons (circles) are intentionally not detected.
 - No field labels - the response says where each box is and whether it is
-  filled, not which question it answers (see below).
+  filled, not which question it answers. Adding them needs OCR + a spatial
+  pairing heuristic; options and costs are in the `TODO` in `detection.py`.
 
-## What production would add
-
-- **Field labels**, behind an opt-in flag: OCR the text beside each box and pair
-  it spatially. Options, cheapest first - Tesseract in this container ($0),
-  Textract `DetectDocumentText` (~$1.50 / 1000 pages), or Textract
-  `AnalyzeDocument` FORMS (~$50 / 1000 pages, which returns labels and selection
-  state directly).
-- Configurable detection thresholds once there is real usage data.
-- PDF input (many appraisal documents arrive as PDF).
-- Async processing (S3 + SQS + polling) if images or traffic outgrow a
-  synchronous Lambda invoke.
+Configurable thresholds, PDF input and async processing are covered in
+[`docs/detection-approach.md`](../../docs/detection-approach.md).
 
 ## Running it
 
