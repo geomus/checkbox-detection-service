@@ -15,9 +15,7 @@ Invoked as an AWS Lambda (container image) by the API service. `handler.py` is
 the only part that touches the outside world; `detection.py` is a pure function.
 
 - Input event: `{ "imageBase64": str }`
-- Output: `{ "boxes": [ { "bbox": [x1, y1, x2, y2], "is_checked": bool }, ... ] }`
-
-`bbox` is the top-left and bottom-right pixel coordinates in the original image.
+- Output: the `{ "boxes": [...] }` contract from the repo root README.
 
 ## How it works
 
@@ -25,8 +23,6 @@ This is the standard OpenCV recipe for the problem (contour detection plus a
 fill-ratio check), as laid out in FuzzyLabs'
 [Checkbox Detection with OpenCV](https://www.fuzzylabs.ai/blog-post/checkbox-detection-with-opencv)
 and the [OpenCV contour tutorial](https://learnopencv.com/contour-detection-using-opencv-python-c/).
-The code in `detection.py` is my own implementation of it, not a dependency (see
-`docs/adr/0002`).
 
 `detect_checkboxes(image_bytes)` runs four steps (`detection.py`):
 
@@ -52,40 +48,28 @@ that; an empty box is near zero.
 
 - Pixel-size thresholds are DPI-dependent: `MIN/MAX_BOX_SIDE_PX` (12-90) fits the
   ~240-470 DPI samples, at the cost of some false positives from small table
-  cells or capital letters. `TODO` in `detection.py`: make them request params.
+  cells or capital letters.
 - The image is processed at native resolution (largest sample ~10 MP). A much
   larger image would want downscaling plus coordinate rescaling.
 - Checkboxes drawn without a printed border are missed - step 3 needs a 4-sided
-  outline. A box crossed by a long hand stroke also fails it (e.g. the crossed-out
-  "No Zoning" on `document-2`): the border stops being a closed contour. That one
-  is recoverable with a horizontal/vertical morphology pass to rebuild the box
-  edges (roughly what `boxdetect` does), not done here - it adds a second
-  candidate pass and cross-dedup for a case whose checked/unchecked answer is
-  itself ambiguous.
-- A box whose outline and mark have both been erased (e.g. Electricity "Public" on
-  `document-2`) is below what threshold-based outline detection can catch without
-  losing precision everywhere. Recovering it would need layout-aware templating,
-  which is out of scope for a general detector.
+  outline, and a box crossed by a long hand stroke (e.g. the struck-out "No
+  Zoning" on `document-2`) loses that closed contour.
+- A box whose outline and mark are both erased (e.g. Electricity "Public" on
+  `document-2`) falls below what outline detection can catch without hurting
+  precision elsewhere.
 - Fill ratio can't tell a deliberate mark from a smudge or bleed-through; a box
   near the 0.12 threshold can go either way.
 - Radio buttons (circles) are intentionally not detected, and there are no field
-  labels (see the `TODO` in `detection.py`).
-
-Why classical CV over Textract or a trained model, and configurable thresholds /
-PDF / async, are in
-[`docs/detection-approach.md`](../../docs/detection-approach.md) and
-[`docs/adr/0002`](../../docs/adr/0002-checkbox-detection-build-vs-buy.md).
+  labels.
 
 ## Running it
 
-```bash
-cd services/detector
-python -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
+Set up the venv per the repo root README, then:
 
-.venv/bin/python -m pytest                       # unit + sample-image tests
+```bash
+.venv/bin/python -m pytest
 ```
 
-From the repo root, `yarn test:detector` runs the same suite, and
-`services/detector/.venv/bin/python scripts/visualize_detections.py` renders the
-detections onto the sample forms in `./detection-preview/` for a visual check.
+`yarn test:detector` from the repo root runs the same suite. Also from the repo
+root, `services/detector/.venv/bin/python scripts/visualize_detections.py` renders
+the detections onto the sample forms in `detection-preview/` for a visual check.

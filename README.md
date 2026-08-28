@@ -13,7 +13,7 @@ services/
 docs/
   adr/        Architecture decision records
   challenge/  Original brief + sample images
-serverless.yml  Serverless Framework config (both functions + frontend bucket)
+serverless.yml  Serverless Framework config (both Lambda functions + HTTP API)
 ```
 
 ![Architecture overview](docs/images/architecture-excalidraw.png)
@@ -29,7 +29,7 @@ serverless.yml  Serverless Framework config (both functions + frontend bucket)
 
 - Python 3.13, managed with `pyenv`, scoped to `services/detector`
 
-No AWS account or credentials are needed for the default `opencv` path: `yarn dev` passes placeholder credentials so `serverless-offline` boots without prompting for a login. `strategy=textract` calls real AWS Textract, so trying that one locally needs real credentials in the environment (see the API contract below).
+The `opencv` path needs no AWS. `strategy=textract` calls real AWS Textract, so exercising it (locally or deployed) needs AWS credentials - see **Running locally**.
 
 **To deploy:**
 
@@ -65,9 +65,9 @@ Python shim (`:8000`). Open http://localhost:5173, or hit the API directly:
 curl -F file=@docs/challenge/sample-images/document-1.jpg http://localhost:3000/detect
 ```
 
-`strategy=textract` has no local emulation - it calls real AWS Textract. To exercise it
-locally, run `aws sso login --profile <profile>` then `AWS_PROFILE=<profile> yarn dev`;
-otherwise `yarn dev` stubs the credentials and only the `opencv` path works.
+`strategy=textract` calls real AWS Textract (no local stub). To exercise it locally, run
+`aws sso login --profile <profile>` then `AWS_PROFILE=<profile> yarn dev`; plain `yarn dev`
+stubs the credentials, so only the `opencv` path works.
 
 ## Testing
 
@@ -75,8 +75,8 @@ otherwise `yarn dev` stubs the credentials and only the `opencv` path works.
 yarn test
 ```
 
-Runs the frontend unit tests (Vitest) and the detector suite (`pytest` against the
-four sample forms). The detector venv from **Setup** must exist first.
+Runs every workspace's tests plus the detector's `pytest` suite. The detector venv
+from **Setup** must exist first.
 
 ## Deployment
 
@@ -84,9 +84,9 @@ four sample forms). The detector venv from **Setup** must exist first.
 yarn deploy
 ```
 
-Builds the workspaces and runs `serverless deploy`: both Lambda functions (the
-Node API zip and the Python detector container image) and the frontend's S3
-bucket, in one CloudFormation stack. See `docs/adr/0001-initial-architecture-decisions.md`.
+Builds the workspaces and runs `serverless deploy`: the Node API (zip) and the
+Python detector (container image), in one CloudFormation stack. See
+`docs/adr/0001-initial-architecture-decisions.md`.
 
 ## API contract
 
@@ -96,8 +96,8 @@ POST /detect
 
 Multipart upload: `file` (the image), optional `strategy` (`opencv` default, or
 `textract`), and (for `textract` only) the image's pixel `width` and `height`.
-`strategy=textract` can be switched off server-side with the `TEXTRACT_ENABLED`
-env var (returns `503`); see [docs/detection-approach.md](docs/detection-approach.md).
+`strategy=textract` can be disabled server-side; see
+[docs/detection-approach.md](docs/detection-approach.md).
 
 ```json
 {
@@ -112,7 +112,27 @@ env var (returns `503`); see [docs/detection-approach.md](docs/detection-approac
 
 - [ADR-0001: Initial architecture decisions](docs/adr/0001-initial-architecture-decisions.md)
 - [ADR-0002: Build, buy, or train the checkbox detector](docs/adr/0002-checkbox-detection-build-vs-buy.md)
+- [ADR-0003: Frontend component approach](docs/adr/0003-frontend-component-approach.md)
 
 ## Approach, trade-offs and limitations
 
 See [docs/detection-approach.md](docs/detection-approach.md).
+
+## Notes
+
+I used AI assistance selectively, mostly to speed up the mechanical parts - the
+Python detector (a stack I don't work in daily), request validation, the test
+suites, and the `scripts/` / `serverless.yml` wiring. I reviewed every line and
+made the final calls on what landed.
+
+The architecture and the trade-offs are mine: the functional core / imperative
+shell split, the Node/TypeScript vs Python boundary, the hybrid `opencv` /
+`textract` detector behind one interface, and what to leave out. `docs/adr/` has
+the reasoning.
+
+The classical-CV pipeline follows FuzzyLabs' *Checkbox Detection with OpenCV*
+guide (linked from [`services/detector/README.md`](services/detector/README.md)).
+
+`yarn npm audit` reports a few advisories inside the `serverless` v3 CLI's own
+dependency tree - dev tooling only, none of it ships in the deployed Lambda or the
+Python image.
