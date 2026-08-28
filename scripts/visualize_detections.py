@@ -18,7 +18,7 @@ import cv2
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "detector"))
 
-from detection import detect_checkboxes  # noqa: E402  (needs the path insert above)
+from detection import detect_checkboxes
 
 SAMPLE_DIR = ROOT / "docs" / "challenge" / "sample-images"
 OUTPUT_DIR = ROOT / "detection-preview"

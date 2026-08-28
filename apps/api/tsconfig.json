@@ -8,6 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
+    // *.test.ts import "./foo.ts" directly: node:test runs the TS as-is and won't remap .js->.ts
+    "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
