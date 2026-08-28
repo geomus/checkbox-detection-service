@@ -35,5 +35,8 @@ h1, h2, h3, p {
 }
 
 @theme {
-  --color-primary: oklch(58.5% 0.233 277.117)
+  --color-primary: oklch(58.5% 0.233 277.117);
+  /* overlay colors: green reads as filled, amber as empty, both stay legible on a grayscale scan */
+  --color-checked: oklch(62% 0.17 150);
+  --color-unchecked: oklch(70% 0.17 60);
 }
