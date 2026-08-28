@@ -14,9 +14,14 @@ const opencvDetector: CheckboxDetector =
 
 // Textract has no local emulation: strategy=textract hits the real service even
 // in local dev (needs AWS credentials). The default opencv path stays offline.
-const checkboxDetectors: Record<DetectionStrategy, CheckboxDetector> = {
-  opencv: opencvDetector,
-  textract: analyzeWithTextract(new TextractClient({}))
+const checkboxDetectors: Partial<Record<DetectionStrategy, CheckboxDetector>> = {
+  opencv: opencvDetector
 };
+
+// TEXTRACT_ENABLED=false drops the paid strategy: no client is built and the API
+// answers strategy=textract with 503. Absent or anything but "false" keeps it on.
+if (process.env.TEXTRACT_ENABLED !== 'false') {
+  checkboxDetectors.textract = analyzeWithTextract(new TextractClient({}));
+}
 
 export const handler = handle(createApp(checkboxDetectors));

@@ -33,7 +33,11 @@ const convertFileToBase64 = async (file: File): Promise<string> => {
   return Buffer.from(arrayBuffer).toString('base64');
 };
 
-export const createApp = (checkboxDetectors: Record<DetectionStrategy, CheckboxDetector>) => {
+// Partial: a strategy the deployment has turned off (see TEXTRACT_ENABLED) is
+// just missing from the map.
+export const createApp = (
+  checkboxDetectors: Partial<Record<DetectionStrategy, CheckboxDetector>>
+) => {
   const app = new Hono();
 
   // A detector that throws (bad AWS credentials, the detector Lambda erroring, a
@@ -51,9 +55,14 @@ export const createApp = (checkboxDetectors: Record<DetectionStrategy, CheckboxD
     }
 
     const { file, strategy, width, height } = parsed.data;
-    const imageBase64 = await convertFileToBase64(file);
 
-    const result = await checkboxDetectors[strategy]({
+    const detector = checkboxDetectors[strategy];
+    if (!detector) {
+      return c.json({ message: `detection strategy "${strategy}" is disabled` }, 503);
+    }
+
+    const imageBase64 = await convertFileToBase64(file);
+    const result = await detector({
       imageBase64,
       imageSize: width && height ? { width, height } : undefined
     });

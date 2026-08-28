@@ -61,6 +61,14 @@ emulation, so `strategy=textract` calls the real service even in local dev and
 needs AWS credentials. Synchronous `AnalyzeDocument` handles single-page images
 only; multi-page PDFs need the asynchronous API (see Scale).
 
+Because it's the only path that costs money, it has a kill switch: set the
+`TEXTRACT_ENABLED` env var on the api Lambda to `false` (straight from the console,
+no redeploy - new invocations pick it up within about a minute) and the API drops
+the strategy from its detector map and answers `strategy=textract` with `503`, no
+AWS call. It defaults to `true`, and a plain `serverless deploy` re-applies that
+default over a console override; to keep it off through a deploy, run
+`TEXTRACT_ENABLED=false yarn deploy`.
+
 ## Choosing between them
 
 The default is `opencv` because it's free and self-contained, which suits a demo.

@@ -90,6 +90,8 @@ POST /detect
 
 Multipart upload: `file` (the image), optional `strategy` (`opencv` default, or
 `textract`), and (for `textract` only) the image's pixel `width` and `height`.
+`strategy=textract` can be switched off server-side with the `TEXTRACT_ENABLED`
+env var (returns `503`); see [docs/detection-approach.md](docs/detection-approach.md).
 
 ```json
 {
