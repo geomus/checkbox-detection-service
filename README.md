@@ -28,7 +28,8 @@ serverless.yml  Serverless Framework config (both functions + frontend bucket)
 **To run the full stack locally (API + detector):** everything above, plus:
 
 - Python 3.13, managed with `pyenv`, scoped to `services/detector`
-- Some AWS credentials present in the environment, even placeholder ones (e.g. `AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local`). `serverless-offline` checks that _something_ is configured at startup, but the default `opencv` detection path never calls real AWS. (`strategy=textract` does, see the API contract below.)
+
+No AWS account or credentials are needed for the default `opencv` path: `yarn dev` passes placeholder credentials so `serverless-offline` boots without prompting for a login. `strategy=textract` calls real AWS Textract, so trying that one locally needs real credentials in the environment (see the API contract below).
 
 **To deploy:**
 
@@ -56,12 +57,17 @@ cd ../..
 yarn dev
 ```
 
-Runs `serverless-offline` (the API, on `:3000`) and the detector's local Python
-shim (`:8000`) together. Then:
+Runs the whole stack together: the web app (Vite, on `:5173`, already pointed at the
+local API), `serverless-offline` (the API, on `:3000`) and the detector's local
+Python shim (`:8000`). Open http://localhost:5173, or hit the API directly:
 
 ```bash
 curl -F file=@docs/challenge/sample-images/document-1.jpg http://localhost:3000/detect
 ```
+
+`strategy=textract` has no local emulation - it calls real AWS Textract. To exercise it
+locally, run `aws sso login --profile <profile>` then `AWS_PROFILE=<profile> yarn dev`;
+otherwise `yarn dev` stubs the credentials and only the `opencv` path works.
 
 ## Testing
 
