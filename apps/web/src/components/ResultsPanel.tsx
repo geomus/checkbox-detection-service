@@ -1,32 +1,39 @@
-import type { DetectedBox, DetectionStrategy } from '@/lib/api'
-import { summarize } from '@/lib/geometry'
-import { cn } from '@/lib/util'
+import type { DetectedBox, DetectionStrategy } from '@/lib/api';
+import { summarize } from '@/lib/geometry';
+import { cn } from '@/lib/util';
 
 type Props = {
-  boxes: DetectedBox[]
-  strategy: DetectionStrategy
-  onStrategyChange: (strategy: DetectionStrategy) => void
-  activeIndex: number | null
-  onHover: (index: number | null) => void
-  onReset: () => void
-}
+  boxes: DetectedBox[];
+  strategy: DetectionStrategy;
+  onStrategyChange: (strategy: DetectionStrategy) => void;
+  activeIndex: number | null;
+  onHover: (index: number | null) => void;
+  onReset: () => void;
+};
 
 const Stat = ({ label, value }: { label: string; value: number }) => (
   <div className="rounded-md border border-gray-200 bg-white py-2">
     <div className="text-lg font-semibold tabular-nums">{value}</div>
     <div className="text-xs text-gray-500">{label}</div>
   </div>
-)
+);
 
 const Legend = ({ swatch, label }: { swatch: string; label: string }) => (
   <span className="flex items-center gap-1.5 text-gray-600">
     <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: swatch }} />
     {label}
   </span>
-)
+);
 
-const ResultsPanel = ({ boxes, strategy, onStrategyChange, activeIndex, onHover, onReset }: Props) => {
-  const { total, checked, unchecked } = summarize(boxes)
+const ResultsPanel = ({
+  boxes,
+  strategy,
+  onStrategyChange,
+  activeIndex,
+  onHover,
+  onReset
+}: Props) => {
+  const { total, checked, unchecked } = summarize(boxes);
 
   return (
     <aside className="flex flex-col gap-5 text-sm lg:sticky lg:top-6 lg:self-start">
@@ -62,10 +69,16 @@ const ResultsPanel = ({ boxes, strategy, onStrategyChange, activeIndex, onHover,
             key={index}
             onMouseEnter={() => onHover(index)}
             onMouseLeave={() => onHover(null)}
-            className={cn('flex items-center justify-between px-3 py-1.5', index === activeIndex && 'bg-gray-50')}
+            className={cn(
+              'flex items-center justify-between px-3 py-1.5',
+              index === activeIndex && 'bg-gray-50'
+            )}
           >
             <span className="tabular-nums text-gray-400">#{index + 1}</span>
-            <span className="font-medium" style={{ color: box.is_checked ? 'var(--color-checked)' : 'var(--color-unchecked)' }}>
+            <span
+              className="font-medium"
+              style={{ color: box.is_checked ? 'var(--color-checked)' : 'var(--color-unchecked)' }}
+            >
               {box.is_checked ? 'checked' : 'empty'}
             </span>
           </li>
@@ -76,7 +89,7 @@ const ResultsPanel = ({ boxes, strategy, onStrategyChange, activeIndex, onHover,
         Upload another
       </button>
     </aside>
-  )
-}
+  );
+};
 
-export default ResultsPanel
+export default ResultsPanel;
