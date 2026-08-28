@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import { useDropzone, type FileRejection } from 'react-dropzone'
 import { cn } from '@/lib/util'
 
@@ -12,6 +11,9 @@ type Props = {
   onReject: (message: string) => void
 }
 
+// Decode the file to read its pixel size: the textract path sends it to scale ratio coords, and
+// the overlay uses it as the SVG viewBox. The object URL lives on in PickedImage; the caller
+// revokes it on reset.
 const readImage = (file: File) =>
   new Promise<PickedImage>((resolve, reject) => {
     const url = URL.createObjectURL(file)
@@ -25,21 +27,18 @@ const readImage = (file: File) =>
   })
 
 const UploadDropzone = ({ onPick, onReject }: Props) => {
-  const onDrop = useCallback(
-    async (accepted: File[], rejections: FileRejection[]) => {
-      if (rejections.length > 0) {
-        const code = rejections[0].errors[0]?.code
-        onReject(code === 'file-too-large' ? 'That image is over the 4 MB limit. Try a smaller scan.' : 'That file is not a JPEG or PNG image.')
-        return
-      }
-      try {
-        onPick(await readImage(accepted[0]))
-      } catch {
-        onReject('That image could not be read. Try a different file.')
-      }
-    },
-    [onPick, onReject]
-  )
+  const onDrop = async (accepted: File[], rejections: FileRejection[]) => {
+    if (rejections.length > 0) {
+      const code = rejections[0].errors[0]?.code
+      onReject(code === 'file-too-large' ? 'That image is over the 4 MB limit. Try a smaller scan.' : 'That file is not a JPEG or PNG image.')
+      return
+    }
+    try {
+      onPick(await readImage(accepted[0]))
+    } catch {
+      onReject('That image could not be read. Try a different file.')
+    }
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

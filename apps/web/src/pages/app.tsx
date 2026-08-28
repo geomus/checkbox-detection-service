@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import DetectionViewer from '@/components/DetectionViewer'
 import ResultsPanel from '@/components/ResultsPanel'
 import UploadDropzone, { type PickedImage } from '@/components/UploadDropzone'
@@ -12,38 +12,30 @@ const App = () => {
   const [strategy, setStrategy] = useState<DetectionStrategy>('opencv')
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
-  const reset = useCallback(() => {
-    setImage((current) => {
-      if (current) URL.revokeObjectURL(current.url)
-      return null
-    })
+  const reset = () => {
+    if (image) URL.revokeObjectURL(image.url)
+    setImage(null)
     setStrategy('opencv')
     setActiveIndex(null)
     setView({ status: 'idle' })
-  }, [])
+  }
 
-  const detectWith = useCallback(async (picked: PickedImage, nextStrategy: DetectionStrategy) => {
+  const detectWith = async (picked: PickedImage, nextStrategy: DetectionStrategy) => {
     setActiveIndex(null)
     setView({ status: 'processing' })
     const result = await detect({ file: picked.file, strategy: nextStrategy, width: picked.width, height: picked.height })
     setView(result.ok ? { status: 'done', boxes: result.boxes } : { status: 'error', message: result.message })
-  }, [])
+  }
 
-  const onPick = useCallback(
-    (picked: PickedImage) => {
-      setImage(picked)
-      void detectWith(picked, strategy)
-    },
-    [detectWith, strategy]
-  )
+  const onPick = (picked: PickedImage) => {
+    setImage(picked)
+    void detectWith(picked, strategy)
+  }
 
-  const onStrategyChange = useCallback(
-    (next: DetectionStrategy) => {
-      setStrategy(next)
-      if (image) void detectWith(image, next)
-    },
-    [detectWith, image]
-  )
+  const onStrategyChange = (next: DetectionStrategy) => {
+    setStrategy(next)
+    if (image) void detectWith(image, next)
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50 text-gray-900">
