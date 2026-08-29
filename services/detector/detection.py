@@ -12,6 +12,7 @@ fill-ratio check):
   2. threshold to black/white with a local (adaptive) cutoff
   3. find contours, keep the ones shaped like a small, roughly square box
   4. drop duplicates (a drawn square gives an inner and an outer contour)
+  5. sort the survivors into reading order (top-to-bottom, left-to-right)
 
 ``README.md`` in this folder has the references, the reasoning and the known
 limitations.
@@ -29,6 +30,12 @@ import numpy as np
 # defaults) once there is real usage data to tune them against.
 MIN_BOX_SIDE_PX = 12
 MAX_BOX_SIDE_PX = 90
+
+# Boxes on one form row can sit a few px apart vertically on a skewed scan. I
+# quantize the top edge into bands this tall before ordering left-to-right, so a
+# row reads in order instead of by its exact y. Wide enough to swallow that
+# jitter, narrower than the gap between rows on the sample forms.
+ROW_BAND_PX = MIN_BOX_SIDE_PX * 2
 
 # How far the width/height ratio may stray from a perfect square (1.0). 0.35
 # keeps anything between roughly 3:4 and 4:3.
@@ -59,7 +66,7 @@ def detect_checkboxes(image_bytes: bytes) -> list[dict]:
     gray = _load_grayscale(image_bytes)
     binary = _binarize(gray)
     candidates = _find_square_candidates(binary)
-    boxes = _deduplicate(candidates)
+    boxes = _reading_order(_deduplicate(candidates))
 
     # TODO: this reports box location + fill, not the field label ("Owner", ...).
     # That needs OCR + a spatial pairing heuristic; see docs/detection-approach.md.
@@ -138,6 +145,11 @@ def _deduplicate(rects: list[Rect]) -> list[Rect]:
         if not inside_existing:
             kept.append((x, y, w, h))
     return kept
+
+
+def _reading_order(rects: list[Rect]) -> list[Rect]:
+    """Top-to-bottom, then left-to-right within each row band."""
+    return sorted(rects, key=lambda r: (r[1] // ROW_BAND_PX, r[0]))
 
 
 def _is_filled(binary: np.ndarray, rect: Rect) -> bool:

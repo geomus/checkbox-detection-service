@@ -87,6 +87,21 @@ def test_ignores_a_box_larger_than_a_checkbox():
     assert detect_checkboxes(_png_bytes(image)) == []
 
 
+def test_returns_boxes_in_reading_order():
+    image = _blank_canvas()
+    corners = [(60, 40), (200, 40), (60, 160), (200, 160)]
+    # Draw them out of reading order, so passing through detection order would fail.
+    for x, y in (corners[3], corners[1], corners[2], corners[0]):
+        cv2.rectangle(image, (x, y), (x + 40, y + 40), 0, 2)
+
+    boxes = detect_checkboxes(_png_bytes(image))
+
+    assert len(boxes) == 4
+    detected = [tuple(box["bbox"][:2]) for box in boxes]
+    for (got_x, got_y), (want_x, want_y) in zip(detected, corners):
+        assert abs(got_x - want_x) <= 2 and abs(got_y - want_y) <= 2
+
+
 # --- Sample-image tests -------------------------------------------------------
 
 
