@@ -2,6 +2,8 @@
 
 Detects and classifies checkboxes (filled or unfilled) in scanned document images. Built as a take-home technical challenge.
 
+Live demo: http://checkbox-detection-service.s3-website-us-east-1.amazonaws.com
+
 ## Project structure
 
 ```
@@ -13,7 +15,7 @@ services/
 docs/
   adr/        Architecture decision records
   challenge/  Original brief + sample images
-serverless.yml  Serverless Framework config (both Lambda functions + HTTP API)
+serverless.yml  Serverless Framework config (both Lambda functions, HTTP API, frontend S3 bucket)
 ```
 
 ![Architecture overview](docs/images/architecture-excalidraw.png)
@@ -84,9 +86,25 @@ from **Setup** must exist first.
 yarn deploy
 ```
 
-Builds the workspaces and runs `serverless deploy`: the Node API (zip) and the
-Python detector (container image), in one CloudFormation stack. See
+`scripts/deploy.mjs` runs the whole thing:
+
+1. builds the API bundle and runs `serverless deploy` - the Node API (zip), the
+   Python detector (container image) and the frontend's S3 bucket, one
+   CloudFormation stack;
+2. reads the stack outputs, builds `apps/web` with `VITE_API_URL` pointed at the
+   deployed API, and `aws s3 sync`s it to the bucket;
+3. prints the live frontend URL.
+
+Needs Docker running (for the detector image) and AWS credentials - `aws sso login
+--profile personal`, or set `AWS_PROFILE`. See
 `docs/adr/0001-initial-architecture-decisions.md`.
+
+The frontend is a plain S3 static website (HTTP). Fronting it with CloudFront for
+HTTPS and a custom domain is a deliberate TODO, not done here.
+
+Each deploy builds and pushes a new detector image. The ECR repo has a lifecycle
+rule that keeps the last 3 and expires the rest; `docker image prune -f` clears
+the local build layers.
 
 ## API contract
 

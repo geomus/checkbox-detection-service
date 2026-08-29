@@ -19,7 +19,7 @@
     "test": "yarn workspaces foreach --all run test && yarn test:detector",
     "test:detector": "cd services/detector && .venv/bin/python -m pytest",
     "lint": "yarn workspaces foreach --all run lint",
-    "deploy": "yarn build && yarn serverless deploy",
+    "deploy": "node scripts/deploy.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
