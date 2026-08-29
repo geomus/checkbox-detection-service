@@ -22,25 +22,18 @@ const selectionBlock = (status: string, box: Record<string, number>) => ({
 
 const size = { width: 1000, height: 2000 };
 
-test('maps a SELECTED element to a checked pixel bbox', async () => {
+test('maps SELECTED to a checked pixel bbox and NOT_SELECTED to unchecked', async () => {
   const { client } = fakeTextract([
-    selectionBlock('SELECTED', { Left: 0.1, Top: 0.2, Width: 0.05, Height: 0.04 })
+    selectionBlock('SELECTED', { Left: 0.1, Top: 0.2, Width: 0.05, Height: 0.04 }),
+    selectionBlock('NOT_SELECTED', { Left: 0.1, Top: 0.5, Width: 0.05, Height: 0.04 })
   ]);
 
   const { boxes } = await analyzeWithTextract(client)({ imageBase64: 'AA==', imageSize: size });
 
-  assert.deepEqual(boxes, [{ bbox: [100, 400, 150, 480], is_checked: true }]);
-});
-
-test('maps NOT_SELECTED to unchecked', async () => {
-  const { client } = fakeTextract([
-    selectionBlock('NOT_SELECTED', { Left: 0, Top: 0, Width: 0.1, Height: 0.1 })
+  assert.deepEqual(boxes, [
+    { bbox: [100, 400, 150, 480], is_checked: true },
+    { bbox: [100, 1000, 150, 1080], is_checked: false }
   ]);
-
-  const { boxes } = await analyzeWithTextract(client)({ imageBase64: 'AA==', imageSize: size });
-
-  assert.equal(boxes.length, 1);
-  assert.equal(boxes[0].is_checked, false);
 });
 
 test('ignores blocks that are not selection elements', async () => {
@@ -114,14 +107,17 @@ test('attaches the field label from the forms key/value graph', async () => {
   assert.deepEqual(boxes, [{ bbox: [100, 400, 150, 480], is_checked: true, label: 'Fee Simple' }]);
 });
 
-test('leaves label off a box Textract did not tie to a key', async () => {
+test('passes the selection confidence through, normalized to 0-1', async () => {
   const { client } = fakeTextract([
-    selectionBlock('NOT_SELECTED', { Left: 0.1, Top: 0.1, Width: 0.05, Height: 0.05 })
+    {
+      ...selectionBlock('SELECTED', { Left: 0.1, Top: 0.2, Width: 0.05, Height: 0.04 }),
+      Confidence: 98.6
+    }
   ]);
 
   const { boxes } = await analyzeWithTextract(client)({ imageBase64: 'AA==', imageSize: size });
 
-  assert.equal('label' in boxes[0], false);
+  assert.equal(boxes[0].confidence, 0.986);
 });
 
 test('throws when the image size is missing', async () => {

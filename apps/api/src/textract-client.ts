@@ -61,6 +61,8 @@ export const analyzeWithTextract = (client: TextractClient): CheckboxDetector =>
       const left = box.Left ?? 0;
       const top = box.Top ?? 0;
       const label = labels.get(block.Id ?? '');
+      // Textract's Confidence is 0-100; the contract's confidence is 0-1.
+      const confidence = block.Confidence !== undefined ? block.Confidence / 100 : undefined;
       boxes.push({
         bbox: [
           Math.round(left * width),
@@ -69,7 +71,8 @@ export const analyzeWithTextract = (client: TextractClient): CheckboxDetector =>
           Math.round((top + (box.Height ?? 0)) * height)
         ],
         is_checked: block.SelectionStatus === 'SELECTED',
-        ...(label !== undefined && { label })
+        ...(label !== undefined && { label }),
+        ...(confidence !== undefined && { confidence })
       });
     }
 

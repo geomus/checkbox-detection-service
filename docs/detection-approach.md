@@ -20,9 +20,10 @@ The response is the contract from the brief:
 
 `bbox` is the top-left and bottom-right pixel coordinates of each detected
 checkbox. Perfect accuracy isn't expected. Each box also carries a `confidence`
-in 0-1 (see each strategy below for what it means). A box from
-`strategy=textract` may also carry a `label` string (the form field it belongs
-to); see that section.
+in 0-1 (see each strategy below for what it means), and a box from
+`strategy=textract` may carry a `label` string (the form field it belongs to).
+Both are additive: the brief's contract is `bbox` plus `is_checked`, and those
+stay exactly as specified.
 
 The API is a pure core (`apps/api/src/handler.ts`) that validates the request
 with Zod and calls whichever detector it was handed, plus an imperative shell
@@ -37,7 +38,7 @@ full detail and the tuning constants are in
 [`services/detector/README.md`](../services/detector/README.md).
 
 Reach for this when you want zero per-call cost, deterministic output, or offline
-operation, and the documents look roughly like the samples: 200-500 DPI scans
+operation, and the documents look roughly like the samples: 240-470 DPI scans
 with printed box outlines. It won't find boxes drawn without a printed border, a
 box crossed by a long pen stroke or table rule can slip past the shape filter,
 the pixel thresholds are tuned to that DPI range, and it produces no field
@@ -53,25 +54,24 @@ classical approach can't give.
 
 One `AnalyzeDocument` call with `FeatureTypes: ['FORMS', 'TABLES']`
 (`apps/api/src/textract-client.ts`). Textract returns a `SELECTION_ELEMENT` block
-for every checkbox with a `SelectionStatus` and a page-ratio bounding box; the
-adapter scales those to pixels with the supplied `width`/`height` and maps
-`SELECTED` to `is_checked`. TABLES is in the request because Textract only returns
-the selection elements it finds inside table cells when tables are asked for, and
-on an appraisal form most checkboxes are in tables - with `FORMS` alone it drops
-them.
+for every checkbox with a `SelectionStatus`, a page-ratio bounding box and a
+`Confidence`; the adapter scales the box to pixels with the supplied
+`width`/`height`, maps `SELECTED` to `is_checked`, and passes `Confidence`
+through as `confidence` normalized to 0-1 (an actual model score, unlike the
+opencv heuristic). Both feature types are requested because most appraisal
+checkboxes sit inside table cells and `FORMS` alone drops those; ADR-0002 has the
+reasoning.
 
 The FORMS output also links most checkboxes to their printed label through a
 key/value graph, so the adapter attaches an optional `label` ("Owner", "Fee
-Simple") to each box it can resolve. On the two sample forms I checked that
-covers about 90-95% of the checkboxes; the rest are table cells with no
-associated key and come back without a label. The classical strategy has no text
-stage, so it never sets `label`.
+Simple") to each box it can resolve - roughly 90%+ of them on the sample forms;
+the rest are table cells with no associated key. The classical strategy has no
+text stage, so it never sets `label`.
 
 Reach for this when the layouts vary and re-tuning the CV thresholds per template
-is not viable: Textract needs no per-layout tuning. It is not more accurate on
-these four samples - with both feature types it lands about level with the
-classical pipeline. It costs about six and a half cents a page (FORMS $0.05 plus
-TABLES $0.015, billed additively, no free tier), needs the
+is not viable: Textract needs no per-layout tuning. On the four samples it lands
+about level with the classical pipeline, not ahead of it (ADR-0002). It bills per
+page with no free tier (ADR-0002 has the figure and the split), needs the
 `textract:AnalyzeDocument` IAM grant and a network round-trip, and has no local
 emulation, so `strategy=textract` calls the real service even in local dev and
 needs AWS credentials. Synchronous `AnalyzeDocument` handles single-page images
