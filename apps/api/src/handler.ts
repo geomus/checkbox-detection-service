@@ -4,6 +4,9 @@ import { z } from 'zod';
 export type DetectedBox = {
   bbox: [number, number, number, number];
   is_checked: boolean;
+  // The form field name ("Owner", "Fee Simple"). Only the textract strategy fills
+  // this in, and only when Textract ties the checkbox to a label.
+  label?: string;
 };
 
 export type DetectionResult = { boxes: DetectedBox[] };

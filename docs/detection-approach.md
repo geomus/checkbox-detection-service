@@ -19,7 +19,8 @@ The response is the contract from the brief:
 ```
 
 `bbox` is the top-left and bottom-right pixel coordinates of each detected
-checkbox. Perfect accuracy isn't expected.
+checkbox. Perfect accuracy isn't expected. A box from `strategy=textract` may
+also carry a `label` string (the form field it belongs to); see that section.
 
 The API is a pure core (`apps/api/src/handler.ts`) that validates the request
 with Zod and calls whichever detector it was handed, plus an imperative shell
@@ -50,6 +51,13 @@ adapter scales those to pixels with the supplied `width`/`height` and maps
 the selection elements it finds inside table cells when tables are asked for, and
 on an appraisal form most checkboxes are in tables - with `FORMS` alone it drops
 them.
+
+The FORMS output also links most checkboxes to their printed label through a
+key/value graph, so the adapter attaches an optional `label` ("Owner", "Fee
+Simple") to each box it can resolve. On the two sample forms I checked that
+covers about 90-95% of the checkboxes; the rest are table cells with no
+associated key and come back without a label. The classical strategy has no text
+stage, so it never sets `label`.
 
 Reach for this when the layouts vary and re-tuning the CV thresholds per template
 is not viable: Textract needs no per-layout tuning. It is not more accurate on

@@ -84,6 +84,46 @@ test('returns boxes in reading order', async () => {
   );
 });
 
+test('attaches the field label from the forms key/value graph', async () => {
+  const { client } = fakeTextract([
+    { Id: 'w1', BlockType: 'WORD', Text: 'Fee' },
+    { Id: 'w2', BlockType: 'WORD', Text: 'Simple' },
+    {
+      Id: 'key1',
+      BlockType: 'KEY_VALUE_SET',
+      EntityTypes: ['KEY'],
+      Relationships: [
+        { Type: 'CHILD', Ids: ['w1', 'w2'] },
+        { Type: 'VALUE', Ids: ['val1'] }
+      ]
+    },
+    {
+      Id: 'val1',
+      BlockType: 'KEY_VALUE_SET',
+      EntityTypes: ['VALUE'],
+      Relationships: [{ Type: 'CHILD', Ids: ['sel1'] }]
+    },
+    {
+      Id: 'sel1',
+      ...selectionBlock('SELECTED', { Left: 0.1, Top: 0.2, Width: 0.05, Height: 0.04 })
+    }
+  ]);
+
+  const { boxes } = await analyzeWithTextract(client)({ imageBase64: 'AA==', imageSize: size });
+
+  assert.deepEqual(boxes, [{ bbox: [100, 400, 150, 480], is_checked: true, label: 'Fee Simple' }]);
+});
+
+test('leaves label off a box Textract did not tie to a key', async () => {
+  const { client } = fakeTextract([
+    selectionBlock('NOT_SELECTED', { Left: 0.1, Top: 0.1, Width: 0.05, Height: 0.05 })
+  ]);
+
+  const { boxes } = await analyzeWithTextract(client)({ imageBase64: 'AA==', imageSize: size });
+
+  assert.equal('label' in boxes[0], false);
+});
+
 test('throws when the image size is missing', async () => {
   const { client } = fakeTextract([]);
 

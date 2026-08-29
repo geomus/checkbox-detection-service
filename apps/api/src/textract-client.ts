@@ -1,4 +1,4 @@
-import { AnalyzeDocumentCommand, type TextractClient } from '@aws-sdk/client-textract';
+import { AnalyzeDocumentCommand, type Block, type TextractClient } from '@aws-sdk/client-textract';
 import type { CheckboxDetector, DetectedBox } from './handler.js';
 
 // `AnalyzeDocument` with the FORMS and TABLES features returns a `SELECTION_ELEMENT`
@@ -7,6 +7,34 @@ import type { CheckboxDetector, DetectedBox } from './handler.js';
 // elements inside table cells when it is asked for tables, and most appraisal checkboxes
 // sit in tables. I scale the ratios to pixels with the caller's image size and treat
 // `SELECTED` as checked.
+
+// FORMS also links each checkbox to its printed label through a KEY_VALUE_SET graph:
+// a KEY block's CHILD words spell the label, its VALUE block's CHILD is the
+// SELECTION_ELEMENT. I walk that once so each box can carry the field name. A
+// checkbox Textract only sees as a bare table cell has no KEY and stays unlabeled.
+const labelsBySelectionId = (blocks: Block[]): Map<string, string> => {
+  const byId = new Map(blocks.map((block) => [block.Id, block]));
+  const relatedIds = (block: Block | undefined, type: string) =>
+    (block?.Relationships ?? []).filter((r) => r.Type === type).flatMap((r) => r.Ids ?? []);
+
+  const labels = new Map<string, string>();
+  for (const key of blocks) {
+    if (key.BlockType !== 'KEY_VALUE_SET' || !key.EntityTypes?.includes('KEY')) continue;
+    const text = relatedIds(key, 'CHILD')
+      .map((id) => byId.get(id)?.Text)
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    if (!text) continue;
+    for (const valueId of relatedIds(key, 'VALUE')) {
+      for (const childId of relatedIds(byId.get(valueId), 'CHILD')) {
+        if (byId.get(childId)?.BlockType === 'SELECTION_ELEMENT') labels.set(childId, text);
+      }
+    }
+  }
+  return labels;
+};
+
 export const analyzeWithTextract = (client: TextractClient): CheckboxDetector => {
   return async ({ imageBase64, imageSize }) => {
     if (!imageSize) {
@@ -21,14 +49,18 @@ export const analyzeWithTextract = (client: TextractClient): CheckboxDetector =>
       })
     );
 
+    const blocks = response.Blocks ?? [];
+    const labels = labelsBySelectionId(blocks);
+
     const boxes: DetectedBox[] = [];
-    for (const block of response.Blocks ?? []) {
+    for (const block of blocks) {
       if (block.BlockType !== 'SELECTION_ELEMENT') continue;
       const box = block.Geometry?.BoundingBox;
       if (!box) continue;
 
       const left = box.Left ?? 0;
       const top = box.Top ?? 0;
+      const label = labels.get(block.Id ?? '');
       boxes.push({
         bbox: [
           Math.round(left * width),
@@ -36,7 +68,8 @@ export const analyzeWithTextract = (client: TextractClient): CheckboxDetector =>
           Math.round((left + (box.Width ?? 0)) * width),
           Math.round((top + (box.Height ?? 0)) * height)
         ],
-        is_checked: block.SelectionStatus === 'SELECTED'
+        is_checked: block.SelectionStatus === 'SELECTED',
+        ...(label !== undefined && { label })
       });
     }
 

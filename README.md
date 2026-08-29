@@ -137,11 +137,14 @@ base64-encoded payload under Lambda's 6 MB synchronous-invoke limit).
 ```json
 {
   "boxes": [
-    { "bbox": [x1, y1, x2, y2], "is_checked": true },
+    { "bbox": [x1, y1, x2, y2], "is_checked": true, "label": "Owner" },
     { "bbox": [x1, y1, x2, y2], "is_checked": false }
   ]
 }
 ```
+
+`label` is optional and only appears on `strategy=textract` results, for boxes
+Textract ties to a form field.
 
 ## Architecture decisions
 
@@ -169,8 +172,9 @@ The main known limitations:
   the `opencv` shape filter.
 - Fill-ratio classification can't tell a deliberate mark from a smudge or
   bleed-through; a box near the threshold can go either way.
-- Radio buttons (circles) are not detected, and neither strategy returns field
-  labels ("Owner", "Fee Simple", ...).
+- Radio buttons (circles) are not detected. The `opencv` strategy returns no field
+  labels; `textract` labels most boxes but misses the ones it only sees as bare
+  table cells.
 - The frontend is served over plain HTTP; HTTPS via CloudFront is a deliberate TODO.
 - Detection runs synchronously behind API Gateway (29s cap, one image per request);
   real volume would need the async pattern described in the write-up.
