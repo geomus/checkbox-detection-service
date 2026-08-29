@@ -24,9 +24,9 @@ provider:
   logRetentionInDays: 14
   runtimeManagement: onFunctionUpdate
   # wildcard is fine here since /detect has no auth/cookies to protect, and the
-  # frontend will call this from a different origin (the S3 website endpoint).
-  # I'd scope this down to that exact origin once there's a stable domain in front
-  # of it (CloudFront), but not worth pinning to a bucket URL that might still move.
+  # frontend calls this from a different origin (the CloudFront distribution).
+  # I'd scope this down to that exact origin, but the distribution domain isn't
+  # known until the first deploy and /detect is public anyway.
   httpApi:
     cors: true
   ecr:
@@ -81,24 +81,20 @@ resources:
           ThrottlingBurstLimit: 20
           ThrottlingRateLimit: 10
   Resources:
-    # TODO: CloudFront in front of this for HTTPS and a custom domain - the plain
-    # S3 website endpoint is HTTP only. Deliberately deferred.
+    # Private bucket - only the CloudFront distribution can read it, through the
+    # Origin Access Control below.
     WebBucket:
       Type: AWS::S3::Bucket
       Properties:
-        # explicit name so the website endpoint reads as
-        # <service>.s3-website-<region>.amazonaws.com, not a random suffix
+        # explicit name so the bucket is predictable, not a random suffix
         BucketName: ${self:service}
-        WebsiteConfiguration:
-          IndexDocument: index.html
-          ErrorDocument: index.html
-        # a static-site bucket is meant to be world-readable; the policy below
-        # grants only s3:GetObject
+        # block all public access; CloudFront reaches it through OAC, which is a
+        # service principal, not "public", so this does not get in the way
         PublicAccessBlockConfiguration:
-          BlockPublicAcls: false
-          BlockPublicPolicy: false
-          IgnorePublicAcls: false
-          RestrictPublicBuckets: false
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
     WebBucketPolicy:
       Type: AWS::S3::BucketPolicy
       Properties:
@@ -106,11 +102,62 @@ resources:
         PolicyDocument:
           Statement:
             - Effect: Allow
-              Principal: '*'
+              Principal:
+                Service: cloudfront.amazonaws.com
               Action: s3:GetObject
               Resource: !Sub '${WebBucket.Arn}/*'
+              Condition:
+                StringEquals:
+                  AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+    # OAC lets the distribution sign its S3 origin requests with SigV4, so the
+    # bucket can stay fully private.
+    WebOriginAccessControl:
+      Type: AWS::CloudFront::OriginAccessControl
+      Properties:
+        OriginAccessControlConfig:
+          Name: ${self:service}-web
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
+    WebDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Enabled: true
+          DefaultRootObject: index.html
+          # NA + EU edge locations only; the cheapest tier and enough for a demo
+          PriceClass: PriceClass_100
+          HttpVersion: http2and3
+          Origins:
+            - Id: web-bucket
+              DomainName: !GetAtt WebBucket.RegionalDomainName
+              OriginAccessControlId: !GetAtt WebOriginAccessControl.Id
+              S3OriginConfig:
+                OriginAccessIdentity: ''
+          DefaultCacheBehavior:
+            TargetOriginId: web-bucket
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            # AWS managed "CachingOptimized" policy
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          # single-page app: a private-bucket 403 or a missing key both serve index.html
+          CustomErrorResponses:
+            - ErrorCode: 403
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+            - ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+          # the free *.cloudfront.net certificate; a custom domain would swap this
+          # for an ACM cert in us-east-1 plus an Aliases entry
+          ViewerCertificate:
+            CloudFrontDefaultCertificate: true
   Outputs:
     WebBucketName:
       Value: !Ref WebBucket
+    WebDistributionId:
+      Value: !Ref WebDistribution
     WebsiteURL:
-      Value: !GetAtt WebBucket.WebsiteURL
+      Value: !Sub 'https://${WebDistribution.DomainName}'

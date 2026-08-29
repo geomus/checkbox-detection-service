@@ -5,7 +5,10 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const STACK = 'checkbox-detection-service-dev';
+// serverless names the stack <service>-<stage>; keep this in step with serverless.yml
+const SERVICE = 'checkbox-detection-service';
+const STAGE = process.env.SLS_STAGE ?? 'dev';
+const STACK = `${SERVICE}-${STAGE}`;
 const profile = process.env.AWS_PROFILE ?? 'personal';
 
 const run = (cmd, args, env) =>
@@ -67,7 +70,7 @@ ensureDocker();
 run('yarn', ['workspace', 'api', 'build']);
 
 // 2. deploy the stack: api lambda, detector image, and the web bucket
-run('yarn', ['serverless', 'deploy']);
+run('yarn', ['serverless', 'deploy', '--stage', STAGE]);
 
 // 3. read what the deploy produced
 const outputs = JSON.parse(
@@ -91,16 +94,28 @@ const outputs = JSON.parse(
 const output = (key) => outputs.find((o) => o.OutputKey === key)?.OutputValue;
 const apiUrl = output('HttpApiUrl');
 const bucket = output('WebBucketName');
+const distributionId = output('WebDistributionId');
 const siteUrl = output('WebsiteURL');
-if (!apiUrl || !bucket || !siteUrl) {
+if (!apiUrl || !bucket || !distributionId || !siteUrl) {
   throw new Error(
-    `stack is missing an expected output: ${JSON.stringify({ apiUrl, bucket, siteUrl })}`
+    `stack is missing an expected output: ${JSON.stringify({ apiUrl, bucket, distributionId, siteUrl })}`
   );
 }
 
-// 4. build the web app against the deployed api, then push it to the bucket
+// 4. build the web app against the deployed api, push it, and bust the CloudFront
+//    cache so the new files are served right away
 run('yarn', ['workspace', 'web', 'build'], { VITE_API_URL: apiUrl });
 run('aws', ['s3', 'sync', 'apps/web/dist', `s3://${bucket}`, '--delete', '--profile', profile]);
+run('aws', [
+  'cloudfront',
+  'create-invalidation',
+  '--distribution-id',
+  distributionId,
+  '--paths',
+  '/*',
+  '--profile',
+  profile
+]);
 
 // 5. drop the local detector image left by the build
 cleanupDockerImages();

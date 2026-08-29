@@ -41,7 +41,9 @@ Original reasoning, still accurate for a project that actually needs to run this
 
 ### 5. Everything in one AWS account, no separate frontend host
 
-The frontend build sits in an S3 bucket, deployed from the same account and the same `serverless.yml` as the backend, not on something like Vercel. I considered serving the static frontend straight from the API's own Lambda (Hono can do this), but that's a known anti-pattern: paying for a Lambda invocation on every image or CSS request that doesn't need any logic behind it. Keeping the static assets in S3 avoids that without introducing a second hosting provider to manage. The cost of this is that a plain S3 website endpoint is HTTP only, not HTTPS, unless I put CloudFront in front of it, which I'm deliberately leaving for later, flagged as a TODO in the code rather than something I'm solving now.
+The frontend build sits in an S3 bucket, deployed from the same account and the same `serverless.yml` as the backend, not on something like Vercel. I considered serving the static frontend straight from the API's own Lambda (Hono can do this), but that's a known anti-pattern: paying for a Lambda invocation on every image or CSS request that doesn't need any logic behind it. Keeping the static assets in S3 avoids that without introducing a second hosting provider to manage.
+
+**Update:** the bucket started as a public S3 website endpoint, which is HTTP only. It is now a private bucket behind a CloudFront distribution (Origin Access Control, `redirect-to-https`, the free `*.cloudfront.net` certificate), so the site is HTTPS and the bucket is no longer world-readable. CloudFront's own free tier covers a demo's traffic. A custom domain would add an ACM certificate in us-east-1 and an `Aliases` entry on the distribution; still deferred, since the `*.cloudfront.net` URL is already valid HTTPS.
 
 ### 6. Yarn workspaces, no Turborepo
 

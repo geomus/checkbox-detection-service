@@ -2,7 +2,7 @@
 
 Detects and classifies checkboxes (filled or unfilled) in scanned document images. Built as a take-home technical challenge.
 
-Live demo: http://checkbox-detection-service.s3-website-us-east-1.amazonaws.com
+Live demo: https://d2bz9c0bd04oia.cloudfront.net
 
 ## Project structure
 
@@ -16,7 +16,7 @@ docs/
   adr/        Architecture decision records
   challenge/  Original brief + sample images
 scripts/      Dev, deploy and detection-preview helpers (plain Node/Python, no deps)
-serverless.yml  Serverless Framework config (both Lambda functions, HTTP API, frontend S3 bucket)
+serverless.yml  Serverless Framework config (both Lambda functions, HTTP API, frontend S3 bucket + CloudFront)
 ```
 
 ![Architecture overview](docs/images/architecture-excalidraw.png)
@@ -103,18 +103,21 @@ yarn deploy
 `scripts/deploy.mjs` runs the whole thing:
 
 1. builds the API bundle and runs `serverless deploy` - the Node API (zip), the
-   Python detector (container image) and the frontend's S3 bucket, one
-   CloudFormation stack;
+   Python detector (container image), and the frontend's S3 bucket + CloudFront
+   distribution, one CloudFormation stack;
 2. reads the stack outputs, builds `apps/web` with `VITE_API_URL` pointed at the
-   deployed API, and `aws s3 sync`s it to the bucket;
+   deployed API, `aws s3 sync`s it to the bucket, and invalidates the CloudFront
+   cache;
 3. prints the live frontend URL.
 
 Needs Docker running (for the detector image) and AWS credentials - `aws sso login
 --profile personal`, or set `AWS_PROFILE`. See
 `docs/adr/0001-initial-architecture-decisions.md`.
 
-The frontend is a plain S3 static website (HTTP). Fronting it with CloudFront for
-HTTPS and a custom domain is a deliberate TODO, not done here.
+The frontend is a private S3 bucket behind CloudFront (HTTPS, `*.cloudfront.net`).
+A custom domain would add an ACM certificate in us-east-1 and an `Aliases` entry;
+deliberately not done here. The first deploy of the distribution takes 5-15
+minutes to propagate.
 
 Each deploy builds and pushes a new detector image. I set a lifecycle rule on the
 ECR repo (kept out of `serverless.yml`) to keep only the last 3. `yarn deploy`
@@ -158,8 +161,8 @@ Textract ties to a form field.
 | HTTP exposure | API Gateway HTTP API (`httpApi`) | `serverless-offline` emulates it natively; Function URLs it does not. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
 | Frontend | React + Vite + Tailwind, hand-rolled components | A component library adds deps to replace ~120 lines of markup. [ADR-0003](docs/adr/0003-frontend-component-approach.md) |
 | Bounding boxes | Hand-drawn SVG overlay | Read-only display needs no annotation library. [ADR-0003](docs/adr/0003-frontend-component-approach.md) |
-| Hosting | S3 static website, same account as the API | No second hosting provider, no Lambda cost for static assets. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
-| IaC | Serverless Framework v3, one `serverless.yml` | v4 needs a paid seat; three resources do not justify CDK. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| Hosting | Private S3 bucket behind CloudFront, same account as the API | HTTPS, no second hosting provider, no Lambda cost for static assets. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| IaC | Serverless Framework v3, one `serverless.yml` | v4 needs a paid seat; a handful of resources do not justify CDK. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
 
 ## Approach, trade-offs and limitations
 
@@ -175,7 +178,8 @@ The main known limitations:
 - Radio buttons (circles) are not detected. The `opencv` strategy returns no field
   labels; `textract` labels most boxes but misses the ones it only sees as bare
   table cells.
-- The frontend is served over plain HTTP; HTTPS via CloudFront is a deliberate TODO.
+- The frontend is HTTPS on a `*.cloudfront.net` domain; a custom domain (ACM cert +
+  `Aliases`) is deliberately not set up.
 - Detection runs synchronously behind API Gateway (29s cap, one image per request);
   real volume would need the async pattern described in the write-up.
 
