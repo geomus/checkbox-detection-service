@@ -93,6 +93,13 @@ DynamoDB. The client polls `GET /detect/{id}` or gets a push. This keeps the
 public endpoint fast and isolates it from a slow or failing detector. Not built
 here.
 
+Repeat documents: `apps/api/src/cache.ts` memoizes results by the `sha256` of the
+uploaded image plus `width x height`, per strategy, in a `Map` in the Lambda's
+module scope. That dedupes re-uploads within a warm instance for free but resets
+on every cold start and is not shared across instances. A cross-instance cache
+would be DynamoDB with a TTL, keyed the same way - worth it once the same
+documents are seen often enough to matter, not before.
+
 ## Trying it
 
 ```bash
