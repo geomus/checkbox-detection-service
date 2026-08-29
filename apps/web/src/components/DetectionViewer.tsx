@@ -48,6 +48,7 @@ const DetectionViewer = ({ image, boxes, activeIndex, onHover }: Props) => (
             <title>
               {box.label ? `${box.label}: ` : ''}
               {box.is_checked ? 'checked' : 'empty'}
+              {box.confidence != null ? ` - ${Math.round(box.confidence * 100)}%` : ''}
             </title>
           </rect>
         );

@@ -1,8 +1,12 @@
+// The API response shape. apps/api/src/handler.ts is the source of truth; there is
+// no shared package for a single endpoint, so this is kept in step by hand.
 export type DetectedBox = {
   bbox: [number, number, number, number];
   is_checked: boolean;
   // Present only on textract results, and only when Textract found a label.
   label?: string;
+  // 0-1. A heuristic for opencv, Textract's own selection score for textract.
+  confidence?: number;
 };
 
 export type DetectionStrategy = 'opencv' | 'textract';
