@@ -5,7 +5,8 @@ export type DetectedBox = {
 
 export type DetectionStrategy = 'opencv' | 'textract';
 
-export type DetectResult = { ok: true; boxes: DetectedBox[] } | { ok: false; message: string };
+export type DetectResult =
+  { ok: true; boxes: DetectedBox[] } | { ok: false; message: string; disabled?: boolean };
 
 type DetectParams = {
   file: File;
@@ -63,6 +64,7 @@ export const detect = async ({
   if (response.status === 503) {
     return {
       ok: false,
+      disabled: true,
       message: apiMessage || 'That detection strategy is turned off on this deployment.'
     };
   }

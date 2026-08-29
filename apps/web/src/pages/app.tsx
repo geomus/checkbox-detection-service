@@ -14,6 +14,7 @@ const App = () => {
   const [view, setView] = useState<View>({ status: 'idle' });
   const [image, setImage] = useState<PickedImage | null>(null);
   const [strategy, setStrategy] = useState<DetectionStrategy>('opencv');
+  const [textractDisabled, setTextractDisabled] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const reset = () => {
@@ -33,11 +34,16 @@ const App = () => {
       width: picked.width,
       height: picked.height
     });
-    setView(
-      result.ok
-        ? { status: 'done', boxes: result.boxes }
-        : { status: 'error', message: result.message }
-    );
+    if (result.ok) {
+      setView({ status: 'done', boxes: result.boxes });
+      return;
+    }
+    // 503: the deployment has this strategy turned off. Grey it out and fall back.
+    if (result.disabled) {
+      setTextractDisabled(true);
+      setStrategy('opencv');
+    }
+    setView({ status: 'error', message: result.message });
   };
 
   const onPick = (picked: PickedImage) => {
@@ -113,6 +119,7 @@ const App = () => {
               boxes={view.boxes}
               strategy={strategy}
               onStrategyChange={onStrategyChange}
+              textractDisabled={textractDisabled}
               activeIndex={activeIndex}
               onHover={setActiveIndex}
               onReset={reset}

@@ -6,6 +6,7 @@ type Props = {
   boxes: DetectedBox[];
   strategy: DetectionStrategy;
   onStrategyChange: (strategy: DetectionStrategy) => void;
+  textractDisabled: boolean;
   activeIndex: number | null;
   onHover: (index: number | null) => void;
   onReset: () => void;
@@ -29,6 +30,7 @@ const ResultsPanel = ({
   boxes,
   strategy,
   onStrategyChange,
+  textractDisabled,
   activeIndex,
   onHover,
   onReset
@@ -48,7 +50,9 @@ const ResultsPanel = ({
           className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5"
         >
           <option value="opencv">OpenCV (local, free)</option>
-          <option value="textract">AWS Textract ($)</option>
+          <option value="textract" disabled={textractDisabled}>
+            AWS Textract ($){textractDisabled ? ' - unavailable' : ''}
+          </option>
         </select>
       </div>
 
