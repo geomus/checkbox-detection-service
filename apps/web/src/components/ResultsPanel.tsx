@@ -10,6 +10,8 @@ type Props = {
   activeIndex: number | null;
   onHover: (index: number | null) => void;
   onReset: () => void;
+  // Totals across the whole upload, shown only when there is more than one image.
+  batchTotals?: { images: number; total: number; checked: number };
 };
 
 const Stat = ({ label, value }: { label: string; value: number }) => (
@@ -33,12 +35,20 @@ const ResultsPanel = ({
   textractDisabled,
   activeIndex,
   onHover,
-  onReset
+  onReset,
+  batchTotals
 }: Props) => {
   const { total, checked, unchecked } = summarize(boxes);
 
   return (
     <aside className="flex flex-col gap-5 text-sm lg:sticky lg:top-6 lg:self-start">
+      {batchTotals && (
+        <p className="rounded-md bg-gray-100 px-3 py-2 text-xs text-gray-600">
+          {batchTotals.images} images - {batchTotals.total} boxes, {batchTotals.checked} checked in
+          total. Stats below are for the selected image.
+        </p>
+      )}
+
       <div>
         <label htmlFor="strategy" className="block font-medium text-gray-700">
           Detection strategy
@@ -51,7 +61,7 @@ const ResultsPanel = ({
         >
           <option value="opencv">OpenCV (local, free)</option>
           <option value="textract" disabled={textractDisabled}>
-            AWS Textract ($){textractDisabled ? ' - unavailable' : ''}
+            AWS Textract (managed, paid, labels){textractDisabled ? ' - unavailable' : ''}
           </option>
         </select>
         <p className="mt-1 text-xs text-gray-500">

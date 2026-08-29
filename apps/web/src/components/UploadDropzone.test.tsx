@@ -36,4 +36,17 @@ describe('UploadDropzone', () => {
       expect(onReject).toHaveBeenCalledWith(expect.stringContaining('JPEG or PNG'))
     );
   });
+
+  it('rejects more than eight images at once', async () => {
+    const onReject = vi.fn();
+    const { container } = render(<UploadDropzone onPick={vi.fn()} onReject={onReject} />);
+
+    fireEvent.change(fileInput(container), {
+      target: {
+        files: Array.from({ length: 9 }, (_, i) => fileOfSize(`p${i}.png`, 'image/png', 1024))
+      }
+    });
+
+    await waitFor(() => expect(onReject).toHaveBeenCalledWith(expect.stringContaining('8 images')));
+  });
 });
