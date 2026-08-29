@@ -69,6 +69,21 @@ test('skips a selection element with no bounding box', async () => {
   assert.equal(boxes.length, 1);
 });
 
+test('returns boxes in reading order', async () => {
+  const { client } = fakeTextract([
+    selectionBlock('SELECTED', { Left: 0.5, Top: 0.5, Width: 0.05, Height: 0.03 }),
+    selectionBlock('NOT_SELECTED', { Left: 0.1, Top: 0.1, Width: 0.05, Height: 0.03 }),
+    selectionBlock('NOT_SELECTED', { Left: 0.6, Top: 0.1, Width: 0.05, Height: 0.03 })
+  ]);
+
+  const { boxes } = await analyzeWithTextract(client)({ imageBase64: 'AA==', imageSize: size });
+
+  assert.deepEqual(
+    boxes.map((b) => b.bbox[0]),
+    [100, 600, 500]
+  );
+});
+
 test('throws when the image size is missing', async () => {
   const { client } = fakeTextract([]);
 

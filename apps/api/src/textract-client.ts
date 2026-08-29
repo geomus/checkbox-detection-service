@@ -40,6 +40,16 @@ export const analyzeWithTextract = (client: TextractClient): CheckboxDetector =>
       });
     }
 
+    // Same reading-order sort the opencv detector applies, so both strategies
+    // return boxes top-to-bottom, left-to-right. Banding the top edge absorbs a
+    // few px of row jitter on a skewed scan before ordering left-to-right.
+    const ROW_BAND_PX = 24;
+    boxes.sort(
+      (a, b) =>
+        Math.floor(a.bbox[1] / ROW_BAND_PX) - Math.floor(b.bbox[1] / ROW_BAND_PX) ||
+        a.bbox[0] - b.bbox[0]
+    );
+
     return { boxes };
   };
 };
