@@ -58,6 +58,8 @@ def test_detects_a_single_empty_checkbox():
     assert len(boxes) == 1
     assert boxes[0]["is_checked"] is False
     assert _iou(boxes[0]["bbox"], [60, 60, 100, 100]) > 0.5
+    # a clean empty box sits far from the fill cutoff, so the heuristic clamps to 1.0
+    assert boxes[0]["confidence"] == 1.0
 
 
 def test_detects_a_single_filled_checkbox():
@@ -127,6 +129,8 @@ def test_every_bbox_is_well_formed(name, detections):
         side = max(x2 - x1, y2 - y1)
         assert MIN_BOX_SIDE_PX <= side <= MAX_BOX_SIDE_PX
         assert isinstance(box["is_checked"], bool)
+        assert isinstance(box["confidence"], float)
+        assert 0.0 <= box["confidence"] <= 1.0
 
 
 @pytest.mark.parametrize("name", SAMPLE_NAMES)

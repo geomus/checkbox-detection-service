@@ -7,6 +7,10 @@ export type DetectedBox = {
   // The form field name ("Owner", "Fee Simple"). Only the textract strategy fills
   // this in, and only when Textract ties the checkbox to a label.
   label?: string;
+  // 0-1. For opencv it is a heuristic (how far the interior ink fraction sits from
+  // the checked/unchecked cutoff), for textract it is the model's own selection
+  // confidence. Not present if a strategy cannot produce one.
+  confidence?: number;
 };
 
 export type DetectionResult = { boxes: DetectedBox[] };

@@ -19,8 +19,10 @@ The response is the contract from the brief:
 ```
 
 `bbox` is the top-left and bottom-right pixel coordinates of each detected
-checkbox. Perfect accuracy isn't expected. A box from `strategy=textract` may
-also carry a `label` string (the form field it belongs to); see that section.
+checkbox. Perfect accuracy isn't expected. Each box also carries a `confidence`
+in 0-1 (see each strategy below for what it means). A box from
+`strategy=textract` may also carry a `label` string (the form field it belongs
+to); see that section.
 
 The API is a pure core (`apps/api/src/handler.ts`) that validates the request
 with Zod and calls whichever detector it was handed, plus an imperative shell
@@ -40,6 +42,12 @@ with printed box outlines. It won't find boxes drawn without a printed border, a
 box crossed by a long pen stroke or table rule can slip past the shape filter,
 the pixel thresholds are tuned to that DPI range, and it produces no field
 labels.
+
+The `confidence` here is a heuristic, not a probability: how far the interior ink
+fraction lands from the checked/unchecked cutoff, clamped to 1. A clean empty box
+or a bold mark scores near 1; a box sitting right on the cutoff scores near 0, so
+a low value flags the ambiguous cases rather than claiming an accuracy the
+classical approach can't give.
 
 ## The Textract strategy (`strategy=textract`)
 

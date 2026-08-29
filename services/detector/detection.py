@@ -33,9 +33,9 @@ MAX_BOX_SIDE_PX = 90
 
 # Boxes on one form row can sit a few px apart vertically on a skewed scan. I
 # quantize the top edge into bands this tall before ordering left-to-right, so a
-# row reads in order instead of by its exact y. Wide enough to swallow that
-# jitter, narrower than the gap between rows on the sample forms.
-ROW_BAND_PX = MIN_BOX_SIDE_PX * 2
+# row reads in order instead of by its exact y. 24 px is wide enough to swallow
+# that jitter, narrower than the gap between rows on the sample forms.
+ROW_BAND_PX = 24
 
 # How far the width/height ratio may stray from a perfect square (1.0). 0.35
 # keeps anything between roughly 3:4 and 4:3.
@@ -60,8 +60,9 @@ Rect = tuple[int, int, int, int]
 def detect_checkboxes(image_bytes: bytes) -> list[dict]:
     """Find every checkbox-like square in an image.
 
-    Returns a list of ``{"bbox": [x1, y1, x2, y2], "is_checked": bool}`` dicts
-    with coordinates in the original image's pixel space.
+    Returns a list of ``{"bbox": [x1, y1, x2, y2], "is_checked": bool,
+    "confidence": float}`` dicts with coordinates in the original image's pixel
+    space.
     """
     gray = _load_grayscale(image_bytes)
     binary = _binarize(gray)
@@ -70,10 +71,13 @@ def detect_checkboxes(image_bytes: bytes) -> list[dict]:
 
     # TODO: this reports box location + fill, not the field label ("Owner", ...).
     # That needs OCR + a spatial pairing heuristic; see docs/detection-approach.md.
-    return [
-        {"bbox": [x, y, x + w, y + h], "is_checked": _is_filled(binary, (x, y, w, h))}
-        for (x, y, w, h) in boxes
-    ]
+    results = []
+    for x, y, w, h in boxes:
+        is_checked, confidence = _classify(binary, (x, y, w, h))
+        results.append(
+            {"bbox": [x, y, x + w, y + h], "is_checked": is_checked, "confidence": confidence}
+        )
+    return results
 
 
 def _load_grayscale(image_bytes: bytes) -> np.ndarray:
@@ -88,9 +92,13 @@ def _load_grayscale(image_bytes: bytes) -> np.ndarray:
 
 
 def _binarize(gray: np.ndarray) -> np.ndarray:
-    """Convert gray -> black/white with ink as white (255) on black (0)."""
-    # adaptiveThreshold args: the window size in px (must be odd) and a constant
-    # subtracted from each window's mean. A local cutoff handles uneven lighting.
+    """Threshold to black/white. findContours traces white shapes on black, so the
+    inverted output puts ink at 255 and paper at 0."""
+    # adaptiveThreshold takes an odd window size in px and a constant subtracted
+    # from each window's mean. blockSize=15 is about one checkbox side at the
+    # sample DPI, so the local mean is taken over roughly a box's worth of pixels;
+    # C=7 lifts the cutoff just above the window mean so faint scanner speckle
+    # stays background. A local cutoff (not one global value) handles uneven scans.
     return cv2.adaptiveThreshold(
         gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, blockSize=15, C=7
     )
@@ -109,7 +117,9 @@ def _looks_like_box(contour: np.ndarray) -> bool:
     # Blind to a box merged with hand ink (cross-outs) or with its printed
     # outline erased. See the Limitations section in README.md.
     perimeter = cv2.arcLength(contour, closed=True)
-    # approxPolyDP simplifies the outline; a clean rectangle collapses to 4 points.
+    # approxPolyDP's epsilon is the largest gap allowed between the real outline
+    # and the simplified one, here 2% of the perimeter: loose enough to collapse a
+    # slightly wavy printed border to 4 corners, tight enough to keep a real corner.
     corners = cv2.approxPolyDP(contour, 0.02 * perimeter, closed=True)
     if len(corners) != 4 or not cv2.isContourConvex(corners):
         return False
@@ -148,18 +158,25 @@ def _deduplicate(rects: list[Rect]) -> list[Rect]:
 
 
 def _reading_order(rects: list[Rect]) -> list[Rect]:
-    """Top-to-bottom, then left-to-right within each row band."""
+    """Sort by row band (see ROW_BAND_PX), then x, so a skewed row still reads left
+    to right instead of by exact y."""
     return sorted(rects, key=lambda r: (r[1] // ROW_BAND_PX, r[0]))
 
 
-def _is_filled(binary: np.ndarray, rect: Rect) -> bool:
-    """Reuse the binary image from detection (ink = white) to measure the box's fill."""
+def _classify(binary: np.ndarray, rect: Rect) -> tuple[bool, float]:
+    """Reuse the binary image from detection (ink = white) to measure the box's fill.
+
+    Returns (is_checked, confidence). The confidence is not a probability: it is
+    how far the interior ink fraction sits from the checked/unchecked cutoff,
+    clamped to 1. A clean empty box or a bold mark lands near 1; a box right at
+    the cutoff lands near 0.
+    """
     x, y, w, h = rect
     inset_x = round(w * BORDER_INSET_RATIO)
     inset_y = round(h * BORDER_INSET_RATIO)
     inner = binary[y + inset_y : y + h - inset_y, x + inset_x : x + w - inset_x]
 
     fill_ratio = np.count_nonzero(inner) / inner.size
-    # bool() so the result is a plain Python bool, not numpy.bool_, which
-    # json.dumps in the handler cannot serialize.
-    return bool(fill_ratio > FILL_RATIO_THRESHOLD)
+    confidence = min(abs(fill_ratio - FILL_RATIO_THRESHOLD) / FILL_RATIO_THRESHOLD, 1.0)
+    # plain Python bool/float: numpy scalars are not JSON-serializable in the handler.
+    return bool(fill_ratio > FILL_RATIO_THRESHOLD), round(float(confidence), 3)

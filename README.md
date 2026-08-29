@@ -140,14 +140,16 @@ base64-encoded payload under Lambda's 6 MB synchronous-invoke limit).
 ```json
 {
   "boxes": [
-    { "bbox": [x1, y1, x2, y2], "is_checked": true, "label": "Owner" },
-    { "bbox": [x1, y1, x2, y2], "is_checked": false }
+    { "bbox": [x1, y1, x2, y2], "is_checked": true, "confidence": 0.94, "label": "Owner" },
+    { "bbox": [x1, y1, x2, y2], "is_checked": false, "confidence": 1.0 }
   ]
 }
 ```
 
-`label` is optional and only appears on `strategy=textract` results, for boxes
-Textract ties to a form field.
+`confidence` is 0-1: a heuristic for `opencv` (distance of the interior ink
+fraction from the checked/unchecked cutoff, not a probability), the model's own
+selection confidence for `textract`. `label` is optional and only appears on
+`strategy=textract` results, for boxes Textract ties to a form field.
 
 ## Architecture decisions
 
