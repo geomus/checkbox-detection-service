@@ -15,6 +15,7 @@ services/
 docs/
   adr/        Architecture decision records
   challenge/  Original brief + sample images
+scripts/      Dev, deploy and detection-preview helpers (plain Node/Python, no deps)
 serverless.yml  Serverless Framework config (both Lambda functions, HTTP API, frontend S3 bucket)
 ```
 
@@ -36,7 +37,10 @@ The `opencv` path needs no AWS. `strategy=textract` calls real AWS Textract, so 
 **To deploy:**
 
 - A real AWS account and a configured AWS CLI/SSO profile
-- Docker Desktop, only needed here, to build the detector's container image for ECR
+- Docker Desktop, running, to build the detector's container image for ECR. The
+  `docker` CLI must be on your PATH: recent Docker Desktop installs it at
+  `~/.docker/bin`, so if `docker --version` fails, add that directory to PATH
+  (`yarn deploy` adds it automatically for its own run if it finds it there).
 
 ## Setup
 
@@ -48,6 +52,7 @@ yarn install
 
 # detector Python environment (needed for local dev and `yarn test`)
 cd services/detector
+# .python-version pins 3.13.7; with pyenv, run `pyenv install 3.13.7` once if you don't have it
 python -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 cd ../..
@@ -67,9 +72,11 @@ Python shim (`:8000`). Open http://localhost:5173, or hit the API directly:
 curl -F file=@docs/challenge/sample-images/document-1.jpg http://localhost:3000/detect
 ```
 
-`strategy=textract` calls real AWS Textract (no local stub). To exercise it locally, run
-`aws sso login --profile <profile>` then `AWS_PROFILE=<profile> yarn dev`; plain `yarn dev`
-stubs the credentials, so only the `opencv` path works.
+`strategy=textract` calls real AWS Textract (no local stub). `yarn dev` uses your
+`personal` AWS profile (or `$AWS_PROFILE`) when it is configured, so a live SSO
+session is enough - run `aws sso login --profile personal` first. With no AWS
+profile set up it falls back to placeholder credentials and only the `opencv` path
+works.
 
 ## Testing
 
@@ -79,6 +86,13 @@ yarn test
 
 Runs every workspace's tests plus the detector's `pytest` suite. The detector venv
 from **Setup** must exist first.
+
+## Build and lint
+
+```bash
+yarn build   # bundles apps/api, builds apps/web
+yarn lint    # eslint on apps/web; apps/api is checked by tsc --noEmit strict in its build
+```
 
 ## Deployment
 
@@ -102,9 +116,10 @@ Needs Docker running (for the detector image) and AWS credentials - `aws sso log
 The frontend is a plain S3 static website (HTTP). Fronting it with CloudFront for
 HTTPS and a custom domain is a deliberate TODO, not done here.
 
-Each deploy builds and pushes a new detector image. The ECR repo has a lifecycle
-rule that keeps the last 3 and expires the rest; `docker image prune -f` clears
-the local build layers.
+Each deploy builds and pushes a new detector image. I set a lifecycle rule on the
+ECR repo (kept out of `serverless.yml`) to keep only the last 3. `yarn deploy`
+drops the local copy of that image and prunes dangling layers when it finishes;
+run `docker builder prune` yourself if the build cache grows.
 
 ## API contract
 
@@ -114,6 +129,8 @@ POST /detect
 
 Multipart upload: `file` (the image), optional `strategy` (`opencv` default, or
 `textract`), and (for `textract` only) the image's pixel `width` and `height`.
+An empty `file` or one over 4 MiB is rejected with `400` (the cap keeps the
+base64-encoded payload under Lambda's 6 MB synchronous-invoke limit).
 `strategy=textract` can be disabled server-side; see
 [docs/detection-approach.md](docs/detection-approach.md).
 
@@ -128,13 +145,35 @@ Multipart upload: `file` (the image), optional `strategy` (`opencv` default, or
 
 ## Architecture decisions
 
-- [ADR-0001: Initial architecture decisions](docs/adr/0001-initial-architecture-decisions.md)
-- [ADR-0002: Build, buy, or train the checkbox detector](docs/adr/0002-checkbox-detection-build-vs-buy.md)
-- [ADR-0003: Frontend component approach](docs/adr/0003-frontend-component-approach.md)
+| Area | Choice | Why |
+|---|---|---|
+| API stack | Node + TypeScript + Hono on Lambda | Runs unmodified on Lambda via `hono/aws-lambda`, pairs cleanly with Zod. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| Detection | Classical OpenCV (contours + fill ratio), no ML | No training data, no model to take on faith. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| Detector language | Small Python module, called Lambda-to-Lambda | The standard tool for classical CV; kept framework-free. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| Detector packaging | Lambda container image | A zip is a poor fit for OpenCV's native deps and size. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| Hybrid strategies | `opencv` default, `textract` opt-in, one interface | Free offline default, managed fallback when layouts vary. [ADR-0002](docs/adr/0002-checkbox-detection-build-vs-buy.md) |
+| HTTP exposure | API Gateway HTTP API (`httpApi`) | `serverless-offline` emulates it natively; Function URLs it does not. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| Frontend | React + Vite + Tailwind, hand-rolled components | A component library adds deps to replace ~120 lines of markup. [ADR-0003](docs/adr/0003-frontend-component-approach.md) |
+| Bounding boxes | Hand-drawn SVG overlay | Read-only display needs no annotation library. [ADR-0003](docs/adr/0003-frontend-component-approach.md) |
+| Hosting | S3 static website, same account as the API | No second hosting provider, no Lambda cost for static assets. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| IaC | Serverless Framework v3, one `serverless.yml` | v4 needs a paid seat; three resources do not justify CDK. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
 
 ## Approach, trade-offs and limitations
 
-See [docs/detection-approach.md](docs/detection-approach.md).
+The full write-up is in [docs/detection-approach.md](docs/detection-approach.md).
+The main known limitations:
+
+- The `opencv` pixel thresholds are tuned to the ~240-470 DPI sample scans; a very
+  different resolution would need retuning or downscaling first.
+- A checkbox with no printed border, or one crossed by a long pen stroke, slips past
+  the `opencv` shape filter.
+- Fill-ratio classification can't tell a deliberate mark from a smudge or
+  bleed-through; a box near the threshold can go either way.
+- Radio buttons (circles) are not detected, and neither strategy returns field
+  labels ("Owner", "Fee Simple", ...).
+- The frontend is served over plain HTTP; HTTPS via CloudFront is a deliberate TODO.
+- Detection runs synchronously behind API Gateway (29s cap, one image per request);
+  real volume would need the async pattern described in the write-up.
 
 ## Notes
 
