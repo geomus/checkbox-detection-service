@@ -44,7 +44,12 @@ const DetectionViewer = ({ image, boxes, activeIndex, onHover }: Props) => (
             vectorEffect="non-scaling-stroke"
             onMouseEnter={() => onHover(index)}
             onMouseLeave={() => onHover(null)}
-          />
+          >
+            <title>
+              {box.label ? `${box.label}: ` : ''}
+              {box.is_checked ? 'checked' : 'empty'}
+            </title>
+          </rect>
         );
       })}
     </svg>

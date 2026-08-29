@@ -54,6 +54,9 @@ const ResultsPanel = ({
             AWS Textract ($){textractDisabled ? ' - unavailable' : ''}
           </option>
         </select>
+        <p className="mt-1 text-xs text-gray-500">
+          Textract also labels each box with its form field (for example "Owner").
+        </p>
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center">
@@ -78,9 +81,12 @@ const ResultsPanel = ({
               index === activeIndex && 'bg-gray-50'
             )}
           >
-            <span className="tabular-nums text-gray-400">#{index + 1}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="tabular-nums text-gray-400">#{index + 1}</span>
+              {box.label && <span className="truncate text-gray-600">{box.label}</span>}
+            </span>
             <span
-              className="font-medium"
+              className="shrink-0 font-medium"
               style={{ color: box.is_checked ? 'var(--color-checked)' : 'var(--color-unchecked)' }}
             >
               {box.is_checked ? 'checked' : 'empty'}

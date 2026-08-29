@@ -1,6 +1,8 @@
 export type DetectedBox = {
   bbox: [number, number, number, number];
   is_checked: boolean;
+  // Present only on textract results, and only when Textract found a label.
+  label?: string;
 };
 
 export type DetectionStrategy = 'opencv' | 'textract';
