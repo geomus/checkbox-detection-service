@@ -17,10 +17,10 @@ provider:
   name: aws
   runtime: nodejs24.x
   region: us-east-1
-  profile: personal # local AWS CLI profile name, not a secret; override with --aws-profile to deploy under a different one
+  profile: ${env:AWS_PROFILE, 'personal'} # local AWS CLI/SSO profile; override with AWS_PROFILE
   architecture: arm64
   timeout: 29
-  versionFunctions: false # no aliases/traffic-shifting here, skip the extra Version resources
+  versionFunctions: false
   logRetentionInDays: 14
   runtimeManagement: onFunctionUpdate
   # wildcard is fine here since /detect has no auth/cookies to protect, and the
@@ -63,13 +63,54 @@ functions:
       - httpApi:
           path: /detect
           method: post
-          # no throttle on this route yet. It has to stay public/unauthenticated per
-          # the brief, so right now the only thing capping cost is API Gateway's
-          # account-wide default. I could add a per-route limit with a raw
-          # CloudFormation RouteSettings override (httpApi doesn't expose it as a
-          # plain config key), but I'd rather pick a real number once I've seen
-          # actual traffic than guess.
+          # /detect stays public/unauthenticated per the brief; the throttle below
+          # (on the stage, since httpApi has no per-route config key) is a coarse
+          # abuse cap, not a real quota.
 
   detector:
     image:
       name: detector
+
+resources:
+  # coarse abuse cap on the one public route; httpApi has no per-route throttle
+  # config key, so this patches the auto-created stage
+  extensions:
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 10
+  Resources:
+    # TODO: CloudFront in front of this for HTTPS and a custom domain - the plain
+    # S3 website endpoint is HTTP only. Deliberately deferred.
+    WebBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        # explicit name so the website endpoint reads as
+        # <service>.s3-website-<region>.amazonaws.com, not a random suffix
+        BucketName: ${self:service}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: index.html
+        # a static-site bucket is meant to be world-readable; the policy below
+        # grants only s3:GetObject
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+    WebBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref WebBucket
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource: !Sub '${WebBucket.Arn}/*'
+  Outputs:
+    WebBucketName:
+      Value: !Ref WebBucket
+    WebsiteURL:
+      Value: !GetAtt WebBucket.WebsiteURL
