@@ -14,10 +14,8 @@ type DetectParams = {
   height: number;
 };
 
-// Falls back to the deployed API so a bare `yarn dev` or the built site works with no setup;
-// point VITE_API_URL at http://localhost:3000 in .env.local for full-stack local dev.
-const API_URL =
-  import.meta.env.VITE_API_URL ?? 'https://mjcb4evp08.execute-api.us-east-1.amazonaws.com';
+// Dev default. `yarn deploy` builds the site with VITE_API_URL set to the deployed API URL.
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
 // The UI's only call to the API. It never throws: transport and HTTP errors come
 // back as { ok: false } with a message already safe to render.
