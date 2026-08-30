@@ -13,8 +13,10 @@ apps/
 services/
   detector/   Python + OpenCV checkbox detection (Lambda container image)
 docs/
-  adr/        Architecture decision records
-  challenge/  Original brief + sample images
+  adr/                   Architecture decision records
+  challenge/             Original brief + sample images
+  images/                Architecture diagram
+  detection-approach.md  Approach, trade-offs, limitations (the brief write-up)
 scripts/      Dev, deploy and detection-preview helpers (plain Node/Python, no deps)
 serverless.yml  Serverless Framework config (both Lambda functions, HTTP API, frontend S3 bucket + CloudFront)
 ```
@@ -26,13 +28,13 @@ serverless.yml  Serverless Framework config (both Lambda functions, HTTP API, fr
 **To just look at the frontend:**
 
 - Node.js 24.x (`.nvmrc` pins this)
-- Corepack enabled (`corepack enable`), manages the pinned Yarn Berry version, see `package.json`
+- Corepack enabled (`corepack enable`); it pins the Yarn Berry version - see `package.json`
 
 **To run the full stack locally (API + detector):** everything above, plus:
 
 - Python 3.13, managed with `pyenv`, scoped to `services/detector`
 
-The `opencv` path needs no AWS. `strategy=textract` calls real AWS Textract, so exercising it (locally or deployed) needs AWS credentials - see **Running locally**.
+The `opencv` path needs no AWS; `strategy=textract` needs AWS credentials (see **Running locally**).
 
 **To deploy:**
 
@@ -65,7 +67,7 @@ yarn dev
 ```
 
 Runs the whole stack together: the web app (Vite, on `:5173`, already pointed at the
-local API), `serverless-offline` (the API, on `:3000`) and the detector's local
+local API), `serverless-offline` (the API, on `:3000`), and the detector's local
 Python shim (`:8000`). Open http://localhost:5173, or hit the API directly:
 
 ```bash
@@ -110,14 +112,12 @@ yarn deploy
    cache;
 3. prints the live frontend URL.
 
-Needs Docker running (for the detector image) and AWS credentials - `aws sso login
---profile personal`, or set `AWS_PROFILE`. See
-`docs/adr/0001-initial-architecture-decisions.md`.
+Needs Docker running and AWS credentials configured (see **Prerequisites** and
+**Running locally**), and `docs/adr/0001-initial-architecture-decisions.md` for
+the reasoning behind the setup.
 
-The frontend is a private S3 bucket behind CloudFront (HTTPS, `*.cloudfront.net`).
-A custom domain would add an ACM certificate in us-east-1 and an `Aliases` entry;
-deliberately not done here. The first deploy of the distribution takes 5-15
-minutes to propagate.
+The frontend is a private S3 bucket behind CloudFront (HTTPS, `*.cloudfront.net`);
+the distribution takes 5-15 minutes to propagate after the first deploy.
 
 Each deploy builds and pushes a new detector image. I set a lifecycle rule on the
 ECR repo (kept out of `serverless.yml`) to keep only the last 3. `yarn deploy`
@@ -132,9 +132,9 @@ POST /detect
 
 Multipart upload: `file` (the image), optional `strategy` (`opencv` default, or
 `textract`), and (for `textract` only) the image's pixel `width` and `height`.
-An empty `file` or one over 4 MiB is rejected with `400` (the cap keeps the
-base64-encoded payload under Lambda's 6 MB synchronous-invoke limit).
-`strategy=textract` can be disabled server-side; see
+An empty `file`, one over 4 MB, or one that is not a JPEG or PNG is rejected with
+`400` (the size cap keeps the base64-encoded payload under Lambda's 6 MB
+synchronous-invoke limit). `strategy=textract` can be disabled server-side; see
 [docs/detection-approach.md](docs/detection-approach.md).
 
 ```json
@@ -146,10 +146,10 @@ base64-encoded payload under Lambda's 6 MB synchronous-invoke limit).
 }
 ```
 
-`confidence` is 0-1: a heuristic for `opencv` (distance of the interior ink
-fraction from the checked/unchecked cutoff, not a probability), the model's own
-selection confidence for `textract`. `label` is optional and only appears on
-`strategy=textract` results, for boxes Textract ties to a form field.
+`confidence` (always present, 0-1) and `label` (optional, `strategy=textract`
+only) are additive extras - the brief's contract is `bbox` plus `is_checked`.
+What `confidence` means for each strategy is in
+[docs/detection-approach.md](docs/detection-approach.md).
 
 ## Architecture decisions
 
@@ -164,26 +164,22 @@ selection confidence for `textract`. `label` is optional and only appears on
 | Frontend | React + Vite + Tailwind, hand-rolled components | A component library adds deps to replace ~120 lines of markup. [ADR-0003](docs/adr/0003-frontend-component-approach.md) |
 | Bounding boxes | Hand-drawn SVG overlay | Read-only display needs no annotation library. [ADR-0003](docs/adr/0003-frontend-component-approach.md) |
 | Hosting | Private S3 bucket behind CloudFront, same account as the API | HTTPS, no second hosting provider, no Lambda cost for static assets. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
-| IaC | Serverless Framework v3, one `serverless.yml` | v4 needs a paid seat; a handful of resources do not justify CDK. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
+| IaC | Serverless Framework v3, one `serverless.yml` | v4 needs a paid seat; v3 is frozen but still deploys this stack fine. CDK is more than a handful of resources justify. [ADR-0001](docs/adr/0001-initial-architecture-decisions.md) |
 
 ## Approach, trade-offs and limitations
 
-The full write-up is in [docs/detection-approach.md](docs/detection-approach.md).
-The main known limitations:
+The full write-up is in [docs/detection-approach.md](docs/detection-approach.md);
+the `opencv` pipeline's own limits are in
+[services/detector/README.md](services/detector/README.md). The headlines:
 
-- The `opencv` pixel thresholds are tuned to the ~240-470 DPI sample scans; a very
-  different resolution would need retuning or downscaling first.
-- A checkbox with no printed border, or one crossed by a long pen stroke, slips past
-  the `opencv` shape filter.
-- Fill-ratio classification can't tell a deliberate mark from a smudge or
-  bleed-through; a box near the threshold can go either way.
-- Radio buttons (circles) are not detected. The `opencv` strategy returns no field
-  labels; `textract` labels most boxes but misses the ones it only sees as bare
-  table cells.
-- The frontend is HTTPS on a `*.cloudfront.net` domain; a custom domain (ACM cert +
-  `Aliases`) is deliberately not set up.
-- Detection runs synchronously behind API Gateway (29s cap, one image per request);
-  real volume would need the async pattern described in the write-up.
+- The `opencv` thresholds are tuned to the ~240-470 DPI sample scans; a very
+  different resolution needs retuning or downscaling.
+- `opencv` misses borderless checkboxes, cross-outs and radio buttons, and near
+  the fill cutoff it can't tell a deliberate mark from bleed-through.
+- Detection runs synchronously behind API Gateway (29s cap, one image per
+  request); real volume needs the async pattern in the write-up.
+- The frontend is HTTPS on a `*.cloudfront.net` domain; a custom domain is
+  deliberately not set up.
 
 ## Notes
 
