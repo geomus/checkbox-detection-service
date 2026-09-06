@@ -31,5 +31,9 @@
     "serverless-better-credentials": "^2.0.1",
     "serverless-offline": "13.10.1",
     "typescript": "^7.0.2"
+  },
+  "resolutions": {
+    "adm-zip": "0.6.0",
+    "tar": "7.5.22"
   }
 }
