@@ -56,9 +56,9 @@ functions:
         - 'apps/api/dist/**'
     environment:
       DETECTOR_FUNCTION_NAME: ${self:custom.detectorFunctionName}
-      # flip to 'false' on the deployed Lambda (console) for an instant Textract
-      # cost stop; a redeploy resets it to this value
-      TEXTRACT_ENABLED: ${env:TEXTRACT_ENABLED, 'true'}
+      # flip to 'true' (console, or TEXTRACT_ENABLED=true yarn deploy) to turn on the
+      # paid Textract strategy; a plain redeploy keeps it off
+      TEXTRACT_ENABLED: ${env:TEXTRACT_ENABLED, 'false'}
     events:
       - httpApi:
           path: /detect

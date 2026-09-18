@@ -39,9 +39,9 @@ const checkboxDetectors: Partial<Record<DetectionStrategy, CheckboxDetector>> = 
   opencv: withCache(opencvDetector)
 };
 
-// TEXTRACT_ENABLED=false drops the paid strategy: no client is built and the API
-// answers strategy=textract with 503. Absent or anything but "false" keeps it on.
-if (process.env.TEXTRACT_ENABLED !== 'false') {
+// TEXTRACT_ENABLED=true turns on the paid strategy; absent or anything else
+// keeps it off, so a plain deploy never re-enables it by accident.
+if (process.env.TEXTRACT_ENABLED === 'true') {
   checkboxDetectors.textract = withCache(analyzeWithTextract(new TextractClient({})));
 }
 
